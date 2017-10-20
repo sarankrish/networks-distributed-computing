@@ -68,7 +68,7 @@ int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 			/* SYN_ACK received from the receiver */
 			gbnhdr *syn_ack_packet = malloc(sizeof(*syn_ack_packet));
 
-			status = recvfrom(sockfd, syn_ack_packet, sizeof(*syn_ack_packet), 0, server, socklen);
+			status = recvfrom(sockfd, syn_ack_packet, sizeof(*syn_ack_packet), 0, server, &socklen);
 			
 			if(status != -1){
 
@@ -166,7 +166,7 @@ int gbn_accept(int sockfd, struct sockaddr *client, socklen_t *socklen){
 			syn_ack_packet->type = SYNACK;
 			syn_ack_packet->seqnum = 1;
 			syn_ack_packet->checksum = 0;
-			status = sendto(sockfd, syn_ack_packet, sizeof(*syn_ack_packet), 0, client, socklen);
+			status = sendto(sockfd, syn_ack_packet, sizeof(*syn_ack_packet), 0, client, *socklen);
 			printf("INFO: Status %d\n", status);
 			if(status != -1){
 				printf("INFO: SYN_ACK sent successfully.\n");
