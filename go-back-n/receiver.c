@@ -28,6 +28,8 @@ int main(int argc, char *argv[])
 		perror("gbn_socket");
 		exit(-1);
 	}
+
+	printf("INFO: Successfully opened socket.\n");
 	
 	/*--- Setting the server's parameters -----*/
 	memset(&server, 0, sizeof(struct sockaddr_in));
@@ -40,12 +42,16 @@ int main(int argc, char *argv[])
 		perror("gbn_bind");
 		exit(-1);
 	}
+
+	printf("INFO: Successfully bound to the designated port.\n");
 	
 	/*----- Listening to new connections -----*/
 	if (gbn_listen(sockfd, 1) == -1){
 		perror("gbn_listen");
 		exit(-1);
 	}
+
+	printf("INFO: Successfully listening to new connections.\n");
 
 	/*----- Waiting for the client to connect -----*/
 	socklen = sizeof(struct sockaddr_in);

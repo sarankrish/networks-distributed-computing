@@ -34,6 +34,7 @@ int main(int argc, char *argv[]){
 		perror("gbn_socket");
 		exit(-1);
 	}
+	printf("INFO: Successfully opened socket.\n");
 
 	/*--- Setting the server's parameters -----*/
 	memset(&server, 0, sizeof(struct sockaddr_in));
@@ -46,6 +47,7 @@ int main(int argc, char *argv[]){
 		perror("gbn_connect");
 		exit(-1);
 	}
+	/*printf("INFO: Successfully opened socket.\n");*/
 
 	/*----- Reading from the file and sending it through the socket -----*/
 	while ((numRead = fread(buf, 1, DATALEN * N, inputFile)) > 0){

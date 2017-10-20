@@ -44,7 +44,7 @@ int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 
 	/* TCP 3-way handshake - Client*/
 	s.state = CLOSED;
-	int retryCount = 0;
+	int retryCount = 1;
 	int status = 0;
 
 	while(retryCount <= MAX_RETRY_ATTEMPTS && s.state != ESTABLISHED){
@@ -55,7 +55,8 @@ int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 			syn_packet->seqnum = 0;
 			syn_packet->checksum = 0;			
 			status = sendto(sockfd, syn_packet, sizeof(*syn_packet), 0, server, socklen);
-			if(status == 1){
+			printf("Status: %d\n",status);
+			if(status == -1){
 				printf("ERROR: SYN send failed.Retrying ...\n");
 				s.state = CLOSED;
 				retryCount++;
@@ -128,9 +129,6 @@ int gbn_socket(int domain, int type, int protocol){
 		
 	/*----- Randomizing the seed. This is used by the rand() function -----*/
 	srand((unsigned)time(0));
-	
-	printf("Inside gbn_socket");
-
 	int sockfd = socket(domain, type, protocol);
 
 	return(sockfd);
@@ -140,7 +138,7 @@ int gbn_accept(int sockfd, struct sockaddr *client, socklen_t *socklen){
 
 	/* TCP 3-way handshake - Server*/
 	s.state = LISTEN;
-	int retryCount = 0;
+	int retryCount = 1;
 	int status = 0;
 
 	while(retryCount <= MAX_RETRY_ATTEMPTS && s.state != ESTABLISHED){
@@ -163,11 +161,13 @@ int gbn_accept(int sockfd, struct sockaddr *client, socklen_t *socklen){
 			}
 		}else if(s.state == SYN_RCVD){
 			/* SYNACK to be sent to the sender */
+			printf("INFO: Preparing to send SYN_ACK to sender...\n");
 			gbnhdr *syn_ack_packet = malloc(sizeof(*syn_ack_packet));
 			syn_ack_packet->type = SYNACK;
 			syn_ack_packet->seqnum = 1;
 			syn_ack_packet->checksum = 0;
 			status = sendto(sockfd, syn_ack_packet, sizeof(*syn_ack_packet), 0, client, socklen);
+			printf("INFO: Status %d\n", status);
 			if(status != -1){
 				printf("INFO: SYN_ACK sent successfully.\n");
 				free(syn_ack_packet);
@@ -180,6 +180,7 @@ int gbn_accept(int sockfd, struct sockaddr *client, socklen_t *socklen){
 						printf("INFO: ACK received successfully.\n");
 						printf("INFO: Connection established successfully.\n");
 						free(ack_packet);
+						return sockfd;
 					}			
 				}else {
 					printf("ERROR: SYNACK wasn't received correctly.Retrying ...\n");
