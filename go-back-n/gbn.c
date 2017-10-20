@@ -1,5 +1,7 @@
 #include "gbn.h"
 
+state_t s;
+
 uint16_t checksum(uint16_t *buf, int nwords)
 {
 	uint32_t sum;
@@ -40,23 +42,82 @@ int gbn_close(int sockfd){
 
 int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 
-	/* TODO: Your code here. */
+	/* TCP 3-way handshake - Client*/
+	s.state = CLOSED;
+	int retryCount = 0;
+	int status = 0;
 
+	while(retryCount <= MAX_RETRY_ATTEMPTS && s.state != ESTABLISHED){
+		if(s.state != SYN_SENT){
+			/* Need malloc or take risk with memory leak ? */
+			/* SYN to be sent to the receiver */
+			gbnhdr syn_packet;
+			syn_packet.type = SYN;
+			syn_packet.seqnum = 0;
+			syn_packet.checksum = 0;			
+			status = sendto(sockfd, &syn_packet, sizeof(syn_packet), 0, server, socklen);
+			if(status == 1){
+				printf("ERROR: SYN send failed.Retrying ...\n");
+				s.state = CLOSED;
+				retryCount++;
+			}
+			printf("INFO: SYN send succeeded.\n");
+			s.state = SYN_SENT;
+		}else if(s.state == SYN_SENT){
+			/* SYN_ACK received from the receiver */
+			gbnhdr syn_ack_packet;
+
+			status = recvfrom(sockfd, &syn_ack_packet, sizeof(syn_ack_packet), 0, server, socklen);
+			
+			if(status != -1){
+
+				if(syn_ack_packet.type == SYNACK){
+					printf("INFO: SYNACK received successfully.\n");
+					/* ACK to be sent to the receiver */
+					gbnhdr ack_packet;
+					ack_packet.type = ACK;
+					ack_packet.seqnum = 1;
+					ack_packet.checksum = 0;
+					status = sendto(sockfd, &ack_packet, sizeof(ack_packet), 0, server, socklen);
+					if(status != -1){
+						s.state = ESTABLISHED;
+						printf("INFO: ACK sent successfully.\n");
+						printf("INFO: Connection established successfully.\n");
+						return SUCCESS;
+					}else{
+						printf("ERROR: ACK send failed.Retrying ...\n");
+						retryCount++;
+						continue;
+					}
+				}else if(syn_ack_packet.type == RST){
+					s.state = CLOSED;
+					printf("INFO: Connection refused by server.\n");
+					return SUCCESS;
+				}
+				
+
+			}else {
+				printf("ERROR: SYNACK wasn't received correctly.Retrying ...\n");
+				retryCount++;
+				continue;
+			}
+		}
+	}
+	printf("ERROR: Maximum retries reached. Exiting.\n");	
 	return(-1);
 }
 
 int gbn_listen(int sockfd, int backlog){
 
-	/* TODO: Your code here. */
+	/*return listen(sockfd, backlog); */
+	return 0;
 
-	return(-1);
 }
 
 int gbn_bind(int sockfd, const struct sockaddr *server, socklen_t socklen){
 
-	/* TODO: Your code here. */
+	return bind(sockfd, server, socklen);
 
-	return(-1);
 }	
 
 int gbn_socket(int domain, int type, int protocol){
@@ -64,9 +125,11 @@ int gbn_socket(int domain, int type, int protocol){
 	/*----- Randomizing the seed. This is used by the rand() function -----*/
 	srand((unsigned)time(0));
 	
-	/* TODO: Your code here. */
+	printf("Inside gbn_socket");
 
-	return(-1);
+	int sockfd = socket(domain, type, protocol);
+
+	return(sockfd);
 }
 
 int gbn_accept(int sockfd, struct sockaddr *client, socklen_t *socklen){

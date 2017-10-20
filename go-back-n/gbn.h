@@ -25,10 +25,13 @@ extern int errno;
 #define DATALEN   1024    /* length of the payload                       */
 #define N         1024    /* Max number of packets a single call to gbn_send can process */
 #define TIMEOUT      1    /* timeout to resend packets (1 second)        */
+#define MAX_RETRY_ATTEMPTS 5 /*Max number of times to resend packet without getting ACK */
+#define SUCCESS 1
 
 /*----- Packet types -----*/
 #define SYN      0        /* Opens a connection                          */
 #define SYNACK   1        /* Acknowledgement of the SYN packet           */
+#define ACK      7        /* Acknowledgement of the SYNACK packet        */
 #define DATA     2        /* Data packets                                */
 #define DATAACK  3        /* Acknowledgement of the DATA packet          */
 #define FIN      4        /* Ends a connection                           */
@@ -46,11 +49,14 @@ typedef struct {
 typedef struct state_t{
 
 	/* TODO: Your state information could be encoded here. */
+	uint8_t state;
+	uint8_t seqnum;
 
 } state_t;
 
 enum {
 	CLOSED=0,
+	LISTEN,
 	SYN_SENT,
 	SYN_RCVD,
 	ESTABLISHED,
@@ -74,6 +80,8 @@ ssize_t  maybe_sendto(int  s, const void *buf, size_t len, int flags, \
                       const struct sockaddr *to, socklen_t tolen);
 
 uint16_t checksum(uint16_t *buf, int nwords);
+
+#define h_addr h_addr_list[0] /* for backward compatibility */
 
 
 #endif

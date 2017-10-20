@@ -1,0 +1,3 @@
+Hello World !
+./receiver 10000 r.txt
+./sender localhost 10000 hello.txt
