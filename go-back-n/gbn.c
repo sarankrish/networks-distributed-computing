@@ -1,3 +1,4 @@
+#include <unistd.h>
 #include "gbn.h"
 
 state_t s;
@@ -14,10 +15,26 @@ uint16_t checksum(uint16_t *buf, int nwords)
 }
 
 ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
-	
 	/* TODO: Your code here. */
+	/*if (len<DATALEN){*/
+		int status=0;
+		gbnhdr *data_packet = malloc(sizeof(*data_packet));
+		data_packet->type=DATA;
+		data_packet->seqnum = s.seqnum+1;
+		data_packet->checksum = 0;
+		memcpy(data_packet->data,buf,len);
 
-	/* Hint: Check the data length field 'len'.
+		status = sendto(sockfd,data_packet,len,0,s.server,s.socklen);
+		printf("Status:%d\n",status);
+		if(status == -1){
+			printf("ERROR: DATA packet %d send failed. Resending ...\n",data_packet->seqnum);
+			return (-1);
+	/*	}*/
+	    free(data_packet);
+		printf("File successfully sent!");
+	}
+
+	/* Hint: sCheck the data length field 'len'.
 	 *       If it is > DATALEN, you will have to split the data
 	 *       up into multiple packets - you don't have to worry
 	 *       about getting more than N * DATALEN.
@@ -85,6 +102,8 @@ int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 						printf("INFO: ACK sent successfully.\n");
 						printf("INFO: Connection established successfully.\n");
 						free(ack_packet);
+						s.server=server;
+						s.socklen=socklen;
 						return SUCCESS;
 					}else{
 						printf("ERROR: ACK send failed.Retrying ...\n");
