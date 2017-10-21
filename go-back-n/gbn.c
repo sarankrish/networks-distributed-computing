@@ -1,7 +1,7 @@
 #include <unistd.h>
 #include "gbn.h"
 
-state_t s;
+state_t state;
 
 uint16_t checksum(uint16_t *buf, int nwords)
 {
@@ -22,11 +22,11 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 	while (len>DATALEN){
 		gbnhdr *data_packet = malloc(sizeof(*data_packet));
 		data_packet->type=DATA;
-		data_packet->seqnum = s.seqnum+1;
+		data_packet->seqnum = state.seqnum+1;
 		data_packet->checksum = 0;
 		memcpy(data_packet->data,buf,DATALEN);
 
-		status = sendto(sockfd,data_packet,DATALEN,0,s.server,s.socklen);
+		status = sendto(sockfd,data_packet,DATALEN,0,state.address,state.socklen);
 		printf("Status:%d\n",status);
 		if(status == -1){
 			printf("ERROR: DATA packet %d send failed. Resending ...\n",data_packet->seqnum);
@@ -40,11 +40,11 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 	}
 	gbnhdr *data_packet = malloc(sizeof(*data_packet));
 	data_packet->type=DATA;
-	data_packet->seqnum = s.seqnum+1;
+	data_packet->seqnum = state.seqnum+1;
 	data_packet->checksum = 0;
 	memcpy(data_packet->data,buf,len);
 
-	status = sendto(sockfd,data_packet,DATALEN,0,s.server,s.socklen);
+	status = sendto(sockfd,data_packet,DATALEN,0,state.address,state.socklen);
 	printf("Status:%d\n",status);
 	if(status == -1){
 		printf("ERROR: DATA packet %d send failed. Resending ...\n",data_packet->seqnum);
@@ -73,29 +73,91 @@ ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
 
 int gbn_close(int sockfd){
 	
-	s.state = CLOSED;
+	state.state = CLOSED;
 	int retryCount = 1;
 	int status = 0;
 
-	while(retryCount <= MAX_RETRY_ATTEMPTS && s.state != ESTABLISHED){
-		if(s.state != SYN_SENT){
+	gbnhdr *fin_packet = malloc(sizeof(*fin_packet));
+	gbnhdr *fin_ack_packet = malloc(sizeof(*fin_ack_packet));
 
+	while(retryCount <= MAX_RETRY_ATTEMPTS && state.state != CLOSED){
 
-	
-		
-	
-	
+		if(state.state == ESTABLISHED){
+			/* Sender to initiate connection teardown with FIN packet */
+			fin_packet->type = FIN;
+			fin_packet->seqnum = 0;
+			fin_packet->checksum = 0;
+			status = sendto(sockfd, fin_packet, sizeof(*fin_packet), 0, state.address, state.socklen);
+			if(status == -1){
+				printf("ERROR: FIN send failed.Retrying ...\n");
+				state.state = ESTABLISHED;
+				retryCount++;
+			}else{
+				printf("INFO: Connection teardown initiated ...\n");
+				printf("INFO: FIN successfully sent.\n");
+				state.state = FIN_SENT;
+			}
+		}else if(state.state == FIN_SENT){
+			/* Receiver responds with FINACK */
+			status = recvfrom(sockfd, fin_ack_packet, sizeof(*fin_ack_packet), 0, state.address, &state.socklen);	
+			if(status != -1){
+				if(fin_ack_packet->type == FINACK){
+					printf("INFO: FINACK received successfully.\n");
+					state.state = FIN_RCVD;
+				}else{
+					printf("ERROR: FINACK wasn't received. Retrying ...\n");
+					state.state = FIN_SENT;
+					retryCount++;
+				}
+			}else if(state.state == FIN_RCVD){
+				/* Receiver sends a FIN */
+				status = recvfrom(sockfd, fin_packet, sizeof(*fin_packet), 0, state.address, &state.socklen);	
+				if(status != -1){
+					if(fin_ack_packet->type == FIN){
+						printf("INFO: FINACK received successfully.\n");
+						/* Sender responding with a FINACK */
+						fin_ack_packet->type = FINACK;
+						fin_ack_packet->seqnum = 0;
+						fin_ack_packet->checksum = 0;
+						status = sendto(sockfd, fin_ack_packet, sizeof(*fin_ack_packet), 0, state.address, state.socklen);
+						if(status == -1){
+							printf("ERROR: FINACK send failed.Retrying ...\n");
+							state.state = FIN_RCVD;
+							retryCount++;
+						}else{
+							printf("INFO: FINACK successfully sent.\n");
+							printf("INFO: Connection terminated.\n");						
+							state.state = CLOSED;
+							close(sockfd);
+							free(fin_packet);
+							free(fin_ack_packet);
+							return SUCCESS;
+						}
+					}else{
+						printf("ERROR: FIN wasn't received. Retrying ...\n");
+						state.state = FIN_RCVD;
+						retryCount++;
+					}
+				}
+			}
+		}
 	}
+
+
+	free(fin_packet);
+	free(fin_ack_packet);
+	return -1;
+}
 
 int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 
 	/* TCP 3-way handshake - Client*/
-	s.state = CLOSED;
+	state.state = CLOSED;
 	int retryCount = 1;
 	int status = 0;
 
-	while(retryCount <= MAX_RETRY_ATTEMPTS && s.state != ESTABLISHED){
-		if(s.state != SYN_SENT){
+	while(retryCount <= MAX_RETRY_ATTEMPTS && state.state != ESTABLISHED){
+		if(state.state != SYN_SENT){
 			/* SYN to be sent to the receiver */
 			gbnhdr *syn_packet = malloc(sizeof(*syn_packet));
 			syn_packet->type = SYN;
@@ -104,13 +166,13 @@ int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 			status = sendto(sockfd, syn_packet, sizeof(*syn_packet), 0, server, socklen);
 			if(status == -1){
 				printf("ERROR: SYN send failed.Retrying ...\n");
-				s.state = CLOSED;
+				state.state = CLOSED;
 				retryCount++;
 			}
 			printf("INFO: SYN send succeeded.\n");
-			s.state = SYN_SENT;
+			state.state = SYN_SENT;
 			free(syn_packet);
-		}else if(s.state == SYN_SENT){
+		}else if(state.state == SYN_SENT){
 			/* SYN_ACK received from the receiver */
 			gbnhdr *syn_ack_packet = malloc(sizeof(*syn_ack_packet));
 
@@ -127,12 +189,12 @@ int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 					ack_packet->checksum = 0;
 					status = sendto(sockfd, ack_packet, sizeof(*ack_packet), 0, server, socklen);
 					if(status != -1){
-						s.state = ESTABLISHED;
+						state.state = ESTABLISHED;
 						printf("INFO: ACK sent successfully.\n");
 						printf("INFO: Connection established successfully.\n");
 						free(ack_packet);
-						s.server=server;
-						s.socklen=socklen;
+						state.address=server;
+						state.socklen=socklen;
 						return SUCCESS;
 					}else{
 						printf("ERROR: ACK send failed.Retrying ...\n");
@@ -141,7 +203,7 @@ int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 						continue;
 					}
 				}else if(syn_ack_packet->type == RST){
-					s.state = CLOSED;
+					state.state = CLOSED;
 					printf("INFO: Connection refused by server.\n");
 					free(syn_ack_packet);
 					return SUCCESS;
@@ -185,29 +247,29 @@ int gbn_socket(int domain, int type, int protocol){
 int gbn_accept(int sockfd, struct sockaddr *client, socklen_t *socklen){
 
 	/* TCP 3-way handshake - Server*/
-	s.state = LISTEN;
+	state.state = LISTEN;
 	int retryCount = 1;
 	int status = 0;
 
-	while(retryCount <= MAX_RETRY_ATTEMPTS && s.state != ESTABLISHED){
+	while(retryCount <= MAX_RETRY_ATTEMPTS && state.state != ESTABLISHED){
 		/* SYN received from the sender */
-		if(s.state != SYN_RCVD){
+		if(state.state != SYN_RCVD){
 			gbnhdr *syn_packet = malloc(sizeof(*syn_packet));
 			status = recvfrom(sockfd, syn_packet, sizeof(*syn_packet), 0, client, socklen);
 			if(status != -1){
 				if(syn_packet->type == SYN){
-					s.state = SYN_RCVD;
+					state.state = SYN_RCVD;
 					printf("INFO: SYN received successfully.\n");
 					free(syn_packet);
 				}			
 			}else {
 				printf("ERROR: SYNACK wasn't received correctly.Retrying ...\n");
 				retryCount++;
-				s.state = LISTEN;
+				state.state = LISTEN;
 				free(syn_packet);
 				continue;
 			}
-		}else if(s.state == SYN_RCVD){
+		}else if(state.state == SYN_RCVD){
 			/* SYNACK to be sent to the sender */
 			gbnhdr *syn_ack_packet = malloc(sizeof(*syn_ack_packet));
 			syn_ack_packet->type = SYNACK;
@@ -222,18 +284,18 @@ int gbn_accept(int sockfd, struct sockaddr *client, socklen_t *socklen){
 				status = recvfrom(sockfd, ack_packet, sizeof(*ack_packet), 0, client, socklen);
 				if(status != -1){
 					if(ack_packet->type == ACK){
-						s.state = ESTABLISHED;
+						state.state = ESTABLISHED;
 						printf("INFO: ACK received successfully.\n");
 						printf("INFO: Connection established successfully.\n");
-						s.address = *client;
-                        s.socklen = *socklen;
+						state.address = client;
+                        state.socklen = *socklen;
 						free(ack_packet);
 						return sockfd;
 					}			
 				}else {
 					printf("ERROR: SYNACK wasn't received correctly.Retrying ...\n");
 					retryCount++;
-					s.state = LISTEN;
+					state.state = LISTEN;
 					free(ack_packet);
 					continue;
 				}

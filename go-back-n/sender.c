@@ -56,6 +56,7 @@ int main(int argc, char *argv[]){
 			exit(-1);
 		}
 	}
+	printf("INFO: Successfully sent the data to the server.\n");
 
 	/*----- Closing the socket -----*/
 	if (gbn_close(sockfd) == -1){
