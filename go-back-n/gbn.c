@@ -16,23 +16,44 @@ uint16_t checksum(uint16_t *buf, int nwords)
 
 ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 	/* TODO: Your code here. */
-	/*if (len<DATALEN){*/
-		int status=0;
+	int status=0;
+	int count=0;
+	printf("Length of file: %d \n",len);
+	while (len>DATALEN){
 		gbnhdr *data_packet = malloc(sizeof(*data_packet));
 		data_packet->type=DATA;
 		data_packet->seqnum = s.seqnum+1;
 		data_packet->checksum = 0;
-		memcpy(data_packet->data,buf,len);
+		memcpy(data_packet->data,buf,DATALEN);
 
-		status = sendto(sockfd,data_packet,len,0,s.server,s.socklen);
+		status = sendto(sockfd,data_packet,DATALEN,0,s.server,s.socklen);
 		printf("Status:%d\n",status);
 		if(status == -1){
 			printf("ERROR: DATA packet %d send failed. Resending ...\n",data_packet->seqnum);
 			return (-1);
-	/*	}*/
+		}
 	    free(data_packet);
-		printf("File successfully sent!");
+		printf("Packet %d successfully sent!",count+1);
+		len-=DATALEN;
+		buf+=DATALEN;
+		count++;
 	}
+	gbnhdr *data_packet = malloc(sizeof(*data_packet));
+	data_packet->type=DATA;
+	data_packet->seqnum = s.seqnum+1;
+	data_packet->checksum = 0;
+	memcpy(data_packet->data,buf,len);
+
+	status = sendto(sockfd,data_packet,DATALEN,0,s.server,s.socklen);
+	printf("Status:%d\n",status);
+	if(status == -1){
+		printf("ERROR: DATA packet %d send failed. Resending ...\n",data_packet->seqnum);
+		return (-1);
+	}
+	free(data_packet);
+	printf("Packet %d successfully sent!",count+1);
+	count++;
+
 
 	/* Hint: sCheck the data length field 'len'.
 	 *       If it is > DATALEN, you will have to split the data
