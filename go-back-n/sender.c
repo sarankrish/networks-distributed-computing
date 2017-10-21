@@ -47,7 +47,7 @@ int main(int argc, char *argv[]){
 		perror("gbn_connect");
 		exit(-1);
 	}
-	/*printf("INFO: Successfully opened socket.\n");*/
+	printf("INFO: Successfully established connection to the server.\n");
 
 	/*----- Reading from the file and sending it through the socket -----*/
 	while ((numRead = fread(buf, 1, DATALEN * N, inputFile)) > 0){

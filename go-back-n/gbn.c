@@ -34,11 +34,20 @@ ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
 }
 
 int gbn_close(int sockfd){
+	
+	s.state = CLOSED;
+	int retryCount = 1;
+	int status = 0;
 
-	/* TODO: Your code here. */
+	while(retryCount <= MAX_RETRY_ATTEMPTS && s.state != ESTABLISHED){
+		if(s.state != SYN_SENT){
 
-	return(-1);
-}
+
+	
+		
+	
+	
+	}
 
 int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 
@@ -55,7 +64,6 @@ int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 			syn_packet->seqnum = 0;
 			syn_packet->checksum = 0;			
 			status = sendto(sockfd, syn_packet, sizeof(*syn_packet), 0, server, socklen);
-			printf("Status: %d\n",status);
 			if(status == -1){
 				printf("ERROR: SYN send failed.Retrying ...\n");
 				s.state = CLOSED;
@@ -161,13 +169,11 @@ int gbn_accept(int sockfd, struct sockaddr *client, socklen_t *socklen){
 			}
 		}else if(s.state == SYN_RCVD){
 			/* SYNACK to be sent to the sender */
-			printf("INFO: Preparing to send SYN_ACK to sender...\n");
 			gbnhdr *syn_ack_packet = malloc(sizeof(*syn_ack_packet));
 			syn_ack_packet->type = SYNACK;
 			syn_ack_packet->seqnum = 1;
 			syn_ack_packet->checksum = 0;
 			status = sendto(sockfd, syn_ack_packet, sizeof(*syn_ack_packet), 0, client, *socklen);
-			printf("INFO: Status %d\n", status);
 			if(status != -1){
 				printf("INFO: SYN_ACK sent successfully.\n");
 				free(syn_ack_packet);
@@ -179,6 +185,8 @@ int gbn_accept(int sockfd, struct sockaddr *client, socklen_t *socklen){
 						s.state = ESTABLISHED;
 						printf("INFO: ACK received successfully.\n");
 						printf("INFO: Connection established successfully.\n");
+						s.address = *client;
+                        s.socklen = *socklen;
 						free(ack_packet);
 						return sockfd;
 					}			

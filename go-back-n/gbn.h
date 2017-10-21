@@ -51,6 +51,8 @@ typedef struct state_t{
 	/* TODO: Your state information could be encoded here. */
 	uint8_t state;
 	uint8_t seqnum;
+	//struct sockaddr address;
+	socklen_t socklen;
 
 } state_t;
 
