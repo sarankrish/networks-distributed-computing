@@ -16,10 +16,6 @@ uint16_t checksum(uint16_t *buf, int nwords)
 	return ~sum;
 }
 
-<<<<<<< HEAD
-ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){	
-	int status=0;
-=======
 void handle_alarm(){
 	/*Signal handler for when a data packet times out.
 	 * Reset current packet to the beginning of window
@@ -37,7 +33,6 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 	state.seq_base=1;
 	state.seq_max=state.seq_base+state.win_size-1;
 	int status=-1;
->>>>>>> 3abf25df5927e2b9b802e5fcfbad3e1a131f7918
 	int count=0;
 	printf("INFO:Length of file: %d bytes\n",len);
 	/*Calculate number of packets*/
@@ -58,37 +53,6 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 		if (state.seq_curr<packet_num){
 			memcpy(data_packet->data,buf+(state.seq_curr-1)*DATALEN,DATALEN);
 		}
-<<<<<<< HEAD
-	    free(data_packet);
-		printf("Packet %d successfully sent!",count+1);
-		len-=DATALEN;
-		buf+=DATALEN;
-		count++;
-	}
-	gbnhdr *data_packet = malloc(sizeof(*data_packet));
-	data_packet->type=DATA;
-	data_packet->seqnum = state.seqnum+1;
-	data_packet->checksum = 0;
-	memcpy(data_packet->data,buf,len);
-
-	status = sendto(sockfd,data_packet,DATALEN,0,state.address,state.socklen);
-	printf("Status:%d\n",status);
-	if(status == -1){
-		printf("ERROR: DATA packet %d send failed. Resending ...\n",data_packet->seqnum);
-		return (-1);
-	}
-	free(data_packet);
-	printf("Packet %d successfully sent!\n",count+1);
-	count++;
-
-	/* Hint: Check the data length field 'len'.
-	 *       If it is > DATALEN, you will have to split the data
-	 *       up into multiple packets - you don't have to worry
-	 *       about getting more than N * DATALEN.
-	 */
-
-	return SUCCESS;
-=======
 		else memcpy(data_packet->data,buf+(state.seq_curr-1)*DATALEN,len%DATALEN);
 
 		state.seq_curr++;
@@ -121,7 +85,6 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 		
 	}
 	return(-1);
->>>>>>> 3abf25df5927e2b9b802e5fcfbad3e1a131f7918
 }
 
 ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){

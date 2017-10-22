@@ -53,11 +53,11 @@ typedef struct state_t{
 	uint8_t seqnum; 
 	struct sockaddr *address;
 	socklen_t socklen;
-	int win_size;
-	int retry;
-	int seq_base;
-	int seq_max;
-	int seq_curr;
+	uint8_t win_size;
+	uint8_t retry;
+	uint8_t seq_base;
+	uint8_t seq_max;
+	uint8_t seq_curr;
 
 } state_t;
 
