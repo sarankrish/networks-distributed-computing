@@ -156,11 +156,13 @@ ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
 				/* Receiver responds with DATAACK */
 				printf("INFO: Packet seqnum : %d State seqnum: %d\n",packet->seqnum,state.seqnum);
                 if(state.seqnum == packet->seqnum){
-                    printf("INFO: Received DATA packet is in sequence.\n");
+					printf("INFO: Received DATA packet is in sequence.\n");
+					memcpy(buf,packet->data,strlen(packet->data));
                     state.seqnum = packet->seqnum + 1;
                     ack_packet->seqnum = state.seqnum;
 					ack_packet->checksum = 0;
 					is_seq = true;
+					return strlen(packet->data);
                 }else {
                     printf("INFO: DATA packet has the incorrect sequence number.\n");
                     ack_packet->seqnum = state.seqnum;
