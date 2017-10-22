@@ -32,9 +32,13 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 	int status=-1;
 	int count=0;
 	printf("INFO:Length of file: %d bytes\n",len);
+	/*Calculate number of packets*/
 	int packet_num;
 	packet_num=len/DATALEN+1;
-	signal(SIGALRM,handle_alarm); /*install alarm handler*/
+	/*install alarm handler*/
+	signal(SIGALRM,handle_alarm);
+	/*if current packet is in the window but not at the beginning, don't reset alarm.
+	 *Only reset alarm when the window has moved.*/
 	bool reset_alrm=true;
 	state.seq_curr=1;
 
@@ -53,7 +57,7 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 			alarm(1.5);
 			reset_alrm=false;
 		}
-		
+
 		status=sendto(sockfd,data_packet,sizeof(*data_packet),0,state.address,state.socklen);
 		if(status==-1){
 			printf("ERROR: DATA packet %d send failed.",state.seq_curr-1);
@@ -61,7 +65,8 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 		else{
 			 printf("INFO: DATA packet %d sent successfully.",state.seq_curr-1);
 		}
-        
+		
+        /*Reached end of window, wait for the correct ACK*/
 		while(state.seq_curr==state.seq_max){
 			if(state.seqnum>state.seq_base){
 				alarm(0);
@@ -76,12 +81,6 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 		
 		
 	}
-
-	/* Hint: sCheck the data length field 'len'.
-	 *       If it is > DATALEN, you will have to split the data
-	 *       up into multiple packets - you don't have to worry
-	 *       about getting more than N * DATALEN.
-	 */
 
 	return(-1);
 }
