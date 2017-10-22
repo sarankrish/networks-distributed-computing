@@ -14,8 +14,7 @@ uint16_t checksum(uint16_t *buf, int nwords)
 	return ~sum;
 }
 
-ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
-	/* TODO: Your code here. */
+ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){	
 	int status=0;
 	int count=0;
 	printf("Length of file: %d \n",len);
@@ -51,29 +50,112 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 		return (-1);
 	}
 	free(data_packet);
-	printf("Packet %d successfully sent!",count+1);
+	printf("Packet %d successfully sent!\n",count+1);
 	count++;
 
-
-	/* Hint: sCheck the data length field 'len'.
+	/* Hint: Check the data length field 'len'.
 	 *       If it is > DATALEN, you will have to split the data
 	 *       up into multiple packets - you don't have to worry
 	 *       about getting more than N * DATALEN.
 	 */
 
-	return(-1);
+	return SUCCESS;
 }
 
 ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
 
-	/* TODO: Your code here. */
+	int retryCount = 1;
+	int status = 0;
 
+	gbnhdr *packet = malloc(sizeof(*packet));
+	gbnhdr *ack_packet = malloc(sizeof(*ack_packet));
+
+	while(retryCount <= MAX_RETRY_ATTEMPTS && state.state != CLOSED){
+
+		status = recvfrom(sockfd, packet, sizeof(*packet), 0, state.address, &state.socklen);
+		if(status != -1){
+			if(packet->type == FIN){
+				/* Sender has initiated connection teardown */
+				printf("INFO: Connection teardown initiated ...\n");
+				printf("INFO: FIN received successfully.\n");
+				state.state = FIN_RCVD;
+				/* Receiver responds with FINACK */
+				ack_packet->type = FINACK;
+				ack_packet->seqnum = 0;
+				ack_packet->checksum = 0;
+				status = sendto(sockfd, ack_packet, sizeof(*ack_packet), 0, state.address, state.socklen);
+				if(status == -1){
+					printf("ERROR: FINACK send failed.Retrying ...\n");
+					state.state = ESTABLISHED;
+					retryCount++;
+				}else{
+					printf("INFO: FINACK successfully sent.\n");
+					state.state = FIN_SENT;
+				}
+				/* Receiver sends FIN */
+				packet->type = FIN;
+				packet->seqnum = 0;
+				packet->checksum = 0;
+				status = sendto(sockfd, packet, sizeof(*packet), 0, state.address, state.socklen);
+				if(status == -1){
+					printf("ERROR: FIN send failed.Retrying ...\n");
+					state.state = FIN_SENT;
+					retryCount++;
+				}else{
+					printf("INFO: FIN successfully sent.\n");
+					state.state = FIN_SENT;
+				}
+			}else if(packet->type == FINACK){
+				/* Sender has responded with FINACK */
+				printf("INFO: FINACK received successfully.\n");
+				/* Receiver terminates connection */
+				state.state = CLOSED;
+				close(sockfd);
+				free(packet);
+				free(ack_packet);
+				printf("INFO: Connection terminated.\n");
+				return 0;
+			}else if(packet->type == DATA){
+				/* Sender has sent a DATA packet */
+				printf("INFO: DATA received successfully.\n");
+				/* Receiver responds with DATAACK */
+                if(state.seqnum == packet->seqnum){
+                    printf("INFO: Received DATA packet is in sequence.\n");
+                    state.seqnum = packet->seqnum + 1;
+                    ack_packet->seqnum = state.seqnum;
+                    ack_packet->checksum = 0;
+                }else {
+                    printf("INFO: DATA packet has the incorrect sequence number.\n");
+                    ack_packet->seqnum = state.seqnum;
+                    ack_packet->checksum = 0;
+                }
+                /* Sending ACK / duplicate ACK */
+                if (sendto(sockfd, ack_packet, sizeof(*ack_packet), 0, state.address, state.socklen) == -1) {
+                        printf("ERROR: ACK sending failed.\n");
+                        state.state = CLOSED;
+                        break;
+                } else {
+					if(state.seqnum == packet->seqnum)
+						printf("INFO: ACK sent successfully.\n");						
+					else
+						printf("INFO: Duplicate ACK has been sent.\n");
+                }
+			}
+		}else{
+				printf("ERROR: Packet wasn't received correctly. Retrying ...\n");
+				state.state = ESTABLISHED;
+				retryCount++;
+		}
+		
+
+	}
+	free(packet);
+	free(ack_packet);
 	return(-1);
 }
 
 int gbn_close(int sockfd){
-	
-	state.state = CLOSED;
+
 	int retryCount = 1;
 	int status = 0;
 
@@ -96,6 +178,7 @@ int gbn_close(int sockfd){
 				printf("INFO: Connection teardown initiated ...\n");
 				printf("INFO: FIN successfully sent.\n");
 				state.state = FIN_SENT;
+				retryCount = 1;
 			}
 		}else if(state.state == FIN_SENT){
 			/* Receiver responds with FINACK */
@@ -104,17 +187,20 @@ int gbn_close(int sockfd){
 				if(fin_ack_packet->type == FINACK){
 					printf("INFO: FINACK received successfully.\n");
 					state.state = FIN_RCVD;
-				}else{
+					retryCount = 1;
+				}
+			}else{
 					printf("ERROR: FINACK wasn't received. Retrying ...\n");
 					state.state = FIN_SENT;
 					retryCount++;
-				}
-			}else if(state.state == FIN_RCVD){
+			}
+		}else if(state.state == FIN_RCVD){
 				/* Receiver sends a FIN */
-				status = recvfrom(sockfd, fin_packet, sizeof(*fin_packet), 0, state.address, &state.socklen);	
+				printf("INFO: Waiting for FIN from receiver.\n");
+				status = recvfrom(sockfd, fin_packet, sizeof(*fin_packet), 0, state.address, &state.socklen);
 				if(status != -1){
-					if(fin_ack_packet->type == FIN){
-						printf("INFO: FINACK received successfully.\n");
+					if(fin_packet->type == FIN){
+						printf("INFO: FIN received successfully.\n");
 						/* Sender responding with a FINACK */
 						fin_ack_packet->type = FINACK;
 						fin_ack_packet->seqnum = 0;
@@ -131,7 +217,7 @@ int gbn_close(int sockfd){
 							close(sockfd);
 							free(fin_packet);
 							free(fin_ack_packet);
-							return SUCCESS;
+							return 0;
 						}
 					}else{
 						printf("ERROR: FIN wasn't received. Retrying ...\n");
@@ -139,14 +225,16 @@ int gbn_close(int sockfd){
 						retryCount++;
 					}
 				}
-			}
 		}
 	}
 
-
 	free(fin_packet);
 	free(fin_ack_packet);
-	return -1;
+	if(retryCount <= MAX_RETRY_ATTEMPTS && state.state == CLOSED)	
+		return SUCCESS;
+
+	printf("ERROR: Maximum retries reached.\n");
+	return(-1);
 }
 
 int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){

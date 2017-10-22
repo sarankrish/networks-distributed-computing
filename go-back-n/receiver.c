@@ -72,6 +72,7 @@ int main(int argc, char *argv[])
 			break;
 		fwrite(buf, 1, numRead, outputFile);
 	}
+	printf("INFO: Successfully received all data.\n");
 
 	/*----- Closing the socket -----*/
 	if (gbn_close(sockfd) == -1){
@@ -79,11 +80,11 @@ int main(int argc, char *argv[])
 		exit(-1);
 	}
 
-	/*----- Closing the file -----*/
+	/*----- Closing the file -----
 	if (fclose(outputFile) == EOF){
 		perror("fclose");
 		exit(-1);
-	}
+	}*/
 			
 	return (0);
 }
