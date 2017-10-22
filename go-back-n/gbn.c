@@ -45,6 +45,7 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 	bool reset_alrm=true;
 	state.seq_curr=1;
 
+
 	while(state.seq_curr<=packet_num){
 		gbnhdr *data_packet=malloc(sizeof(*data_packet));
 		data_packet->type=DATA;
@@ -84,13 +85,14 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 		
 		
 	}
-	return(-1);
+	return(0);
 }
 
 ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
 
 	int retryCount = 1;
 	int status = 0;
+	bool is_seq = false;
 
 	gbnhdr *packet = malloc(sizeof(*packet));
 	gbnhdr *ack_packet = malloc(sizeof(*ack_packet));
@@ -144,15 +146,18 @@ ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
 				/* Sender has sent a DATA packet */
 				printf("INFO: DATA received successfully.\n");
 				/* Receiver responds with DATAACK */
+				printf("Packet seqnum : %d State seqnum: %d\n",packet->seqnum,state.seqnum);
                 if(state.seqnum == packet->seqnum){
                     printf("INFO: Received DATA packet is in sequence.\n");
                     state.seqnum = packet->seqnum + 1;
                     ack_packet->seqnum = state.seqnum;
-                    ack_packet->checksum = 0;
+					ack_packet->checksum = 0;
+					is_seq = true;
                 }else {
                     printf("INFO: DATA packet has the incorrect sequence number.\n");
                     ack_packet->seqnum = state.seqnum;
-                    ack_packet->checksum = 0;
+					ack_packet->checksum = 0;
+					is_seq = false;
                 }
                 /* Sending ACK / duplicate ACK */
                 if (sendto(sockfd, ack_packet, sizeof(*ack_packet), 0, state.address, state.socklen) == -1) {
@@ -160,7 +165,7 @@ ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
                         state.state = CLOSED;
                         break;
                 } else {
-					if(state.seqnum == packet->seqnum)
+					if(is_seq)
 						printf("INFO: ACK sent successfully.\n");						
 					else
 						printf("INFO: Duplicate ACK has been sent.\n");
@@ -309,6 +314,7 @@ int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 						free(ack_packet);
 						state.address=server;
 						state.socklen=socklen;
+						state.seqnum = 1;
 						return SUCCESS;
 					}else{
 						printf("ERROR: ACK send failed.Retrying ...\n");
@@ -402,7 +408,8 @@ int gbn_accept(int sockfd, struct sockaddr *client, socklen_t *socklen){
 						printf("INFO: ACK received successfully.\n");
 						printf("INFO: Connection established successfully.\n");
 						state.address = client;
-                        state.socklen = *socklen;
+						state.socklen = *socklen;
+						state.seqnum = 1;
 						free(ack_packet);
 						return sockfd;
 					}			
