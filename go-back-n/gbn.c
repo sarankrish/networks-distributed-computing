@@ -1,4 +1,6 @@
 #include <unistd.h>
+#include <signal.h>
+#include <stdbool.h>
 #include "gbn.h"
 
 state_t state;
@@ -14,23 +16,49 @@ uint16_t checksum(uint16_t *buf, int nwords)
 	return ~sum;
 }
 
+<<<<<<< HEAD
 ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){	
 	int status=0;
-	int count=0;
-	printf("Length of file: %d \n",len);
-	while (len>DATALEN){
-		gbnhdr *data_packet = malloc(sizeof(*data_packet));
-		data_packet->type=DATA;
-		data_packet->seqnum = state.seqnum+1;
-		data_packet->checksum = 0;
-		memcpy(data_packet->data,buf,DATALEN);
+=======
+void handle_alarm(){
+	/*Signal handler for when a data packet times out.
+	 * Reset current packet to the beginning of window
+	 * thus resending all paeckets in the window */
+	if(state.retry<=5){
+		state.seq_curr=state.seq_base;
+		state.retry++;
+		state.win_size=1;
+	}
+}
 
-		status = sendto(sockfd,data_packet,DATALEN,0,state.address,state.socklen);
-		printf("Status:%d\n",status);
-		if(status == -1){
-			printf("ERROR: DATA packet %d send failed. Resending ...\n",data_packet->seqnum);
-			return (-1);
+ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
+	state.win_size=1;
+	state.retry=0;
+	state.seq_base=1;
+	state.seq_max=state.seq_base+state.win_size-1;
+	int status=-1;
+>>>>>>> 3abf25df5927e2b9b802e5fcfbad3e1a131f7918
+	int count=0;
+	printf("INFO:Length of file: %d bytes\n",len);
+	/*Calculate number of packets*/
+	int packet_num;
+	packet_num=len/DATALEN+1;
+	/*install alarm handler*/
+	signal(SIGALRM,handle_alarm);
+	/*if current packet is in the window but not at the beginning, don't reset alarm.
+	 *Only reset alarm when the window has moved.*/
+	bool reset_alrm=true;
+	state.seq_curr=1;
+
+	while(state.seq_curr<=packet_num){
+		gbnhdr *data_packet=malloc(sizeof(*data_packet));
+		data_packet->type=DATA;
+		data_packet->seqnum=state.seq_curr;
+		data_packet->checksum=0;
+		if (state.seq_curr<packet_num){
+			memcpy(data_packet->data,buf+(state.seq_curr-1)*DATALEN,DATALEN);
 		}
+<<<<<<< HEAD
 	    free(data_packet);
 		printf("Packet %d successfully sent!",count+1);
 		len-=DATALEN;
@@ -60,6 +88,40 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 	 */
 
 	return SUCCESS;
+=======
+		else memcpy(data_packet->data,buf+(state.seq_curr-1)*DATALEN,len%DATALEN);
+
+		state.seq_curr++;
+		if(reset_alrm==true){
+			alarm(1.5);
+			reset_alrm=false;
+		}
+
+		status=sendto(sockfd,data_packet,sizeof(*data_packet),0,state.address,state.socklen);
+		if(status==-1){
+			printf("ERROR: DATA packet %d send failed.",state.seq_curr-1);
+		}
+		else{
+			 printf("INFO: DATA packet %d sent successfully.",state.seq_curr-1);
+		}
+
+        /*Reached end of window, wait for the correct ACK*/
+		while(state.seq_curr==state.seq_max){
+			if(state.seqnum>state.seq_base){
+				alarm(0);
+				state.seq_max=state.seqnum+state.win_size-1;
+				state.seq_base=state.seqnum;
+				reset_alrm=true;
+				state.retry=0;
+				state.win_size=2;
+				break;
+			}
+		}
+		
+		
+	}
+	return(-1);
+>>>>>>> 3abf25df5927e2b9b802e5fcfbad3e1a131f7918
 }
 
 ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
@@ -278,6 +340,7 @@ int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 					status = sendto(sockfd, ack_packet, sizeof(*ack_packet), 0, server, socklen);
 					if(status != -1){
 						state.state = ESTABLISHED;
+						state.seqnum=ack_packet->seqnum;
 						printf("INFO: ACK sent successfully.\n");
 						printf("INFO: Connection established successfully.\n");
 						free(ack_packet);
