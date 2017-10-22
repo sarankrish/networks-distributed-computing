@@ -17,6 +17,9 @@ uint16_t checksum(uint16_t *buf, int nwords)
 }
 
 void handle_alarm(){
+	/*Signal handler for when a data packet times out.
+	 * Reset current packet to the beginning of window
+	 * thus resending all paeckets in the window */
 	if(state.retry<=5){
 		state.seq_curr=state.seq_base;
 		state.retry++;
@@ -65,7 +68,7 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 		else{
 			 printf("INFO: DATA packet %d sent successfully.",state.seq_curr-1);
 		}
-		
+
         /*Reached end of window, wait for the correct ACK*/
 		while(state.seq_curr==state.seq_max){
 			if(state.seqnum>state.seq_base){
@@ -81,7 +84,6 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 		
 		
 	}
-
 	return(-1);
 }
 
