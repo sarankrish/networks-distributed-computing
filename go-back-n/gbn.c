@@ -1,4 +1,6 @@
 #include <unistd.h>
+#include <signal.h>
+#include <stdbool.h>
 #include "gbn.h"
 
 state_t state;
@@ -14,46 +16,66 @@ uint16_t checksum(uint16_t *buf, int nwords)
 	return ~sum;
 }
 
+void handle_alarm(){
+	if(state.retry<=5){
+		state.seq_curr=state.seq_base;
+		state.retry++;
+		state.win_size=1;
+	}
+}
+
 ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
-	/* TODO: Your code here. */
-	int status=0;
+	state.win_size=1;
+	state.retry=0;
+	state.seq_base=1;
+	state.seq_max=state.seq_base+state.win_size-1;
+	int status=-1;
 	int count=0;
-	printf("Length of file: %d \n",len);
-	while (len>DATALEN){
-		gbnhdr *data_packet = malloc(sizeof(*data_packet));
+	printf("INFO:Length of file: %d bytes\n",len);
+	int packet_num;
+	packet_num=len/DATALEN+1;
+	signal(SIGALRM,handle_alarm); /*install alarm handler*/
+	bool reset_alrm=true;
+	state.seq_curr=1;
+
+	while(state.seq_curr<=packet_num){
+		gbnhdr *data_packet=malloc(sizeof(*data_packet));
 		data_packet->type=DATA;
-		data_packet->seqnum = state.seqnum+1;
-		data_packet->checksum = 0;
-		memcpy(data_packet->data,buf,DATALEN);
-
-		status = sendto(sockfd,data_packet,DATALEN,0,state.address,state.socklen);
-		printf("Status:%d\n",status);
-		if(status == -1){
-			printf("ERROR: DATA packet %d send failed. Resending ...\n",data_packet->seqnum);
-			return (-1);
+		data_packet->seqnum=state.seq_curr;
+		data_packet->checksum=0;
+		if (state.seq_curr<packet_num){
+			memcpy(data_packet->data,buf+(state.seq_curr-1)*DATALEN,DATALEN);
 		}
-	    free(data_packet);
-		printf("Packet %d successfully sent!",count+1);
-		len-=DATALEN;
-		buf+=DATALEN;
-		count++;
-	}
-	gbnhdr *data_packet = malloc(sizeof(*data_packet));
-	data_packet->type=DATA;
-	data_packet->seqnum = state.seqnum+1;
-	data_packet->checksum = 0;
-	memcpy(data_packet->data,buf,len);
+		else memcpy(data_packet->data,buf+(state.seq_curr-1)*DATALEN,len%DATALEN);
 
-	status = sendto(sockfd,data_packet,DATALEN,0,state.address,state.socklen);
-	printf("Status:%d\n",status);
-	if(status == -1){
-		printf("ERROR: DATA packet %d send failed. Resending ...\n",data_packet->seqnum);
-		return (-1);
+		state.seq_curr++;
+		if(reset_alrm==true){
+			alarm(1.5);
+			reset_alrm=false;
+		}
+		
+		status=sendto(sockfd,data_packet,sizeof(*data_packet),0,state.address,state.socklen);
+		if(status==-1){
+			printf("ERROR: DATA packet %d send failed.",state.seq_curr-1);
+		}
+		else{
+			 printf("INFO: DATA packet %d sent successfully.",state.seq_curr-1);
+		}
+        
+		while(state.seq_curr==state.seq_max){
+			if(state.seqnum>state.seq_base){
+				alarm(0);
+				state.seq_max=state.seqnum+state.win_size-1;
+				state.seq_base=state.seqnum;
+				reset_alrm=true;
+				state.retry=0;
+				state.win_size=2;
+				break;
+			}
+		}
+		
+		
 	}
-	free(data_packet);
-	printf("Packet %d successfully sent!",count+1);
-	count++;
-
 
 	/* Hint: sCheck the data length field 'len'.
 	 *       If it is > DATALEN, you will have to split the data
@@ -190,6 +212,7 @@ int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 					status = sendto(sockfd, ack_packet, sizeof(*ack_packet), 0, server, socklen);
 					if(status != -1){
 						state.state = ESTABLISHED;
+						state.seqnum=ack_packet->seqnum;
 						printf("INFO: ACK sent successfully.\n");
 						printf("INFO: Connection established successfully.\n");
 						free(ack_packet);
