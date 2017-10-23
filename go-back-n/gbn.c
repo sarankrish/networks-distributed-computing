@@ -23,6 +23,7 @@ void handle_alarm(int sig){
 	printf("RETRY: %d\n",state.retry);
 	if(state.retry<=5){
 		state.seq_curr=state.seq_base;
+		state.seqnum=state.seq_base+1;
 		state.retry++;
 		state.win_size=1;
 	}
@@ -88,7 +89,7 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 		/*Reached end of window, wait for the correct ACK*/
 		while(state.seq_curr-1==state.seq_max){
 			if(state.retry<=5){
-				if (state.seq_curr>packet_num) return (0);
+				if (state.seq_base>packet_num) return (0);
 				gbnhdr *packet = malloc(sizeof(*packet));
 				status = recvfrom(sockfd, packet, sizeof(*packet), 0, state.address, &state.socklen);
 				if(status!=-1 ){
@@ -136,6 +137,7 @@ ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
 				printf("INFO: DATA received successfully.\n");
 				/* Receiver responds with DATAACK */
 				ack_packet->type=DATAACK;
+				if(state.seqnum==N+1)state.seqnum=1;
 				printf("INFO: Packet seqnum : %d State seqnum: %d\n",packet->seqnum,state.seqnum);
                 if(state.seqnum == packet->seqnum){
 					printf("INFO: Received DATA packet is in sequence.\n");
