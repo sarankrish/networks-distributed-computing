@@ -136,23 +136,29 @@ ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
 				printf("INFO: DATA received successfully.\n");
 				/* Receiver responds with DATAACK */
 				ack_packet->type=DATAACK;
-				
 				printf("INFO: Packet seqnum : %d State seqnum: %d\n",packet->seqnum,state.seqnum);
                 if(state.seqnum == packet->seqnum){
-					printf("INFO: Received DATA packet is in sequence.\n");
-					memcpy(buf,packet->data,sizeof(packet->data));
-					state.seqnum = packet->seqnum + 1;
-					if (state.seqnum==N+1)state.seqnum=1;
-                    ack_packet->seqnum = state.seqnum;
-					ack_packet->checksum = 0;
-					is_seq = true;
+					if(checksum_expected==checksum_actual){
+						printf("INFO: Received DATA packet is in sequence.\n");
+						memcpy(buf,packet->data,sizeof(packet->data));
+						state.seqnum = packet->seqnum + 1;
+						if (state.seqnum==N+1)state.seqnum=1;
+						ack_packet->seqnum = state.seqnum;
+						ack_packet->checksum = 0;
+						is_seq = true;
+					}
+					else{
+						printf("INFO: Checksum failed!\n");
+						ack_packet->seqnum=state.seqnum;
+						ack_packet->checksum=0;
+						is_seq=false;
+					}
                 }else {
 					printf("INFO: DATA packet has the incorrect sequence number.\n");
-					ack_packet->type=DATAACK;
                     ack_packet->seqnum = state.seqnum;
 					ack_packet->checksum = 0;
 					is_seq = false;
-                }
+				}
                 /* Sending ACK / duplicate ACK */
                 if (maybe_sendto(sockfd, ack_packet, sizeof(*ack_packet), 0, state.address, state.socklen) == -1) {
                         printf("ERROR: ACK sending failed.\n");
