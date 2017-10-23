@@ -22,7 +22,7 @@ void handle_alarm(int sig){
 	 * thus resending all paeckets in the window */
 	printf("RETRY: %d\n",state.retry);
 	if(state.retry<=5){
-		state.seq_curr=state.seq_base+1;
+		state.seq_curr=state.seq_base;
 		state.retry++;
 		state.win_size=1;
 		state.seq_max=state.seq_base+state.win_size-1;
@@ -32,7 +32,7 @@ void handle_alarm(int sig){
 		return;
 	}
 	signal(SIGALRM,handle_alarm);
-	alarm(3);
+	alarm(1.5);
 	return;
 }
 
@@ -53,11 +53,9 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 	state.seq_curr=1;
 
     printf("PACKET COUNT: %d \n",packet_num);
-	while(state.seq_curr<=packet_num+1){
+	while(state.seq_curr<=packet_num){
 		/*install alarm handler*/
 		signal(SIGALRM,handle_alarm);
-		if (state.seq_curr==N+1)state.seq_curr=1;
-		state.seq_max=state.seq_base+state.win_size-1;
 		gbnhdr *data_packet=malloc(sizeof(*data_packet));
 		data_packet->type=DATA;
 		data_packet->seqnum=state.seq_curr;
@@ -66,15 +64,18 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 
 		state.seq_curr++;
 		if(reset_alrm==true){
-			alarm(3);
+			alarm(1.5);
 			reset_alrm=false;
 		}
 
 		data_packet->checksum = checksum(data_packet, sizeof(*data_packet) / sizeof(uint16_t));
 		printf("INFO: Checksum of packet: %d\n",data_packet->checksum);
 
-		if(state.seq_curr-1==packet_num && len%DATALEN>0)
-			status=maybe_sendto(sockfd,data_packet,5+len%DATALEN,0,state.address,state.socklen);
+		if(state.seq_curr-1==packet_num)
+			if (len%DATALEN>0)
+				status=maybe_sendto(sockfd,data_packet,5+len%DATALEN,0,state.address,state.socklen);
+			else
+				status=maybe_sendto(sockfd,data_packet,sizeof(*data_packet),0,state.address,state.socklen);
 		else if(state.seq_curr-1<packet_num)
 			status=maybe_sendto(sockfd,data_packet,sizeof(*data_packet),0,state.address,state.socklen);
 
@@ -101,8 +102,8 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 							state.seq_base=packet->seqnum;
 							reset_alrm=true;
 							state.win_size=2;
+							break;
 						}
-						break;
 					}
 				}
 			}else return(-1);
@@ -140,7 +141,8 @@ ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
                 if(state.seqnum == packet->seqnum){
 					printf("INFO: Received DATA packet is in sequence.\n");
 					memcpy(buf,packet->data,sizeof(packet->data));
-                    state.seqnum = packet->seqnum + 1;
+					state.seqnum = packet->seqnum + 1;
+					if (state.seqnum==N+1)state.seqnum=1;
                     ack_packet->seqnum = state.seqnum;
 					ack_packet->checksum = 0;
 					is_seq = true;
