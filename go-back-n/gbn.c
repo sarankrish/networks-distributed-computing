@@ -36,6 +36,7 @@ void handle_alarm(int sig){
 }
 
 ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
+	state.send_count++;
 	state.win_size=1;
 	state.retry=0;
 	state.seq_base=1;
@@ -55,7 +56,7 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 	state.seq_curr=1;
 
     printf("PACKET COUNT: %d \n",packet_num);
-	while(state.seq_curr<=packet_num+1){
+	while(state.seq_curr<=packet_num){
 		state.seq_max=state.seq_base+state.win_size-1;
 		gbnhdr *data_packet=malloc(sizeof(*data_packet));
 		data_packet->type=DATA;
@@ -139,7 +140,8 @@ ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
 				printf("INFO: Packet seqnum : %d State seqnum: %d\n",packet->seqnum,state.seqnum);
                 if(state.seqnum == packet->seqnum){
 					printf("INFO: Received DATA packet is in sequence.\n");
-					memcpy(buf,packet->data,sizeof(packet->data));
+					memcpy(buf,packet->data,status-5);
+					if(packet->seqnum==N-1)packet->seqnum=0;
                     state.seqnum = packet->seqnum + 1;
                     ack_packet->seqnum = state.seqnum;
 					ack_packet->checksum = 0;
@@ -164,20 +166,6 @@ ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
 					}else
 						printf("INFO: Duplicate ACK has been sent.\n");
 				}
-				/*if(*packet->data!=NULL){
-					printf("SIZE: %d \n",sizeof(packet->data));
-					return sizeof(packet->data);
-				}
-				else{
-					/*Listen for the next packet,determine if having reached end of file.
-					* If have received all data, wait for FIN*/ /*
-					status=recvfrom(sockfd, packet, sizeof(*packet), 0, state.address, &state.socklen);
-					if(status!=-1 && packet->type==FIN ){
-						
-					}
-					else return sizeof(packet->data);
-				}*/
-				
 			}
 			else if (packet->type==FIN){
 				state.state=FIN_INIT;
@@ -387,6 +375,7 @@ int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 						state.address=server;
 						state.socklen=socklen;
 						state.seqnum = 1;
+						state.send_count=-1;
 						return SUCCESS;
 					}else{
 						printf("ERROR: ACK send failed.Retrying ...\n");

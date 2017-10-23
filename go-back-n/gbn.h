@@ -58,6 +58,7 @@ typedef struct state_t{
 	uint16_t seq_base;
 	uint16_t seq_max;
 	uint16_t seq_curr;
+	uint8_t send_count;
 
 } state_t;
 
