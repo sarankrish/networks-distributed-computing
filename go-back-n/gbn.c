@@ -71,18 +71,18 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 		data_packet->checksum = checksum(data_packet, sizeof(*data_packet) / sizeof(uint16_t));
 		printf("INFO: Checksum of packet: %d\n",data_packet->checksum);
 
-		if(state.seq_curr-1==packet_num)
+		if(state.seq_curr-1==packet_num){
 			if (len%DATALEN>0)
 				status=maybe_sendto(sockfd,data_packet,5+len%DATALEN,0,state.address,state.socklen);
 			else
 				status=maybe_sendto(sockfd,data_packet,sizeof(*data_packet),0,state.address,state.socklen);
-		else if(state.seq_curr-1<packet_num)
+			state.win_size=1;
+		}else if(state.seq_curr-1<packet_num)
 			status=maybe_sendto(sockfd,data_packet,sizeof(*data_packet),0,state.address,state.socklen);
 
 		if(status==-1){
 			printf("ERROR: DATA packet %d send failed.\n",state.seq_curr-1);
-		}
-		else{
+		}else{
 			 printf("INFO: DATA packet %d sent successfully.\n",state.seq_curr-1);
 			 state.retry=0;
 		}
@@ -166,20 +166,6 @@ ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
 					}else
 						printf("INFO: Duplicate ACK has been sent.\n");
 				}
-				/*if(*packet->data!=NULL){
-					printf("SIZE: %d \n",sizeof(packet->data));
-					return sizeof(packet->data);
-				}
-				else{
-					/*Listen for the next packet,determine if having reached end of file.
-					* If have received all data, wait for FIN*/ /*
-					status=recvfrom(sockfd, packet, sizeof(*packet), 0, state.address, &state.socklen);
-					if(status!=-1 && packet->type==FIN ){
-						
-					}
-					else return sizeof(packet->data);
-				}*/
-				
 			}
 			else if (packet->type==FIN){
 				state.state=FIN_INIT;
