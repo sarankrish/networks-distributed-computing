@@ -22,17 +22,17 @@ void handle_alarm(int sig){
 	 * thus resending all paeckets in the window */
 	printf("RETRY: %d\n",state.retry);
 	if(state.retry<=5){
-		state.seq_curr=state.seq_base;
-		state.seqnum=state.seq_base+1;
+		state.seq_curr=state.seq_base+1;
 		state.retry++;
 		state.win_size=1;
+		state.seq_max=state.seq_base+state.win_size-1;
 	}
 	else{
 		printf("ERROR: Exceeded retry limit. Check for connection error!\n");
 		return;
 	}
 	signal(SIGALRM,handle_alarm);
-	alarm(1.5);
+	alarm(3);
 	return;
 }
 
@@ -42,14 +42,11 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 	state.seq_base=1;
 	state.seq_max=state.seq_base+state.win_size-1;
 	int status=-1;
-	int count=0;
 	printf("INFO: Length of file: %d bytes\n",len);
 	/*Calculate number of packets*/
 	int packet_num;
 	if(len%DATALEN==0)packet_num=len/DATALEN;
 	else packet_num=len/DATALEN+1;
-	/*install alarm handler*/
-	signal(SIGALRM,handle_alarm);
 	/*if current packet is in the window but not at the beginning, don't reset alarm.
 	 *Only reset alarm when the window has moved.*/
 	bool reset_alrm=true;
@@ -57,6 +54,9 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 
     printf("PACKET COUNT: %d \n",packet_num);
 	while(state.seq_curr<=packet_num+1){
+		/*install alarm handler*/
+		signal(SIGALRM,handle_alarm);
+		if (state.seq_curr==N+1)state.seq_curr=1;
 		state.seq_max=state.seq_base+state.win_size-1;
 		gbnhdr *data_packet=malloc(sizeof(*data_packet));
 		data_packet->type=DATA;
@@ -66,17 +66,16 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 
 		state.seq_curr++;
 		if(reset_alrm==true){
-			alarm(1.5);
+			alarm(3);
 			reset_alrm=false;
 		}
 
 		data_packet->checksum = checksum(data_packet, sizeof(*data_packet) / sizeof(uint16_t));
-
 		printf("INFO: Checksum of packet: %d\n",data_packet->checksum);
 
 		if(state.seq_curr-1==packet_num && len%DATALEN>0)
 			status=maybe_sendto(sockfd,data_packet,5+len%DATALEN,0,state.address,state.socklen);
-		else 
+		else if(state.seq_curr-1<packet_num)
 			status=maybe_sendto(sockfd,data_packet,sizeof(*data_packet),0,state.address,state.socklen);
 
 		if(status==-1){
@@ -84,6 +83,7 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 		}
 		else{
 			 printf("INFO: DATA packet %d sent successfully.\n",state.seq_curr-1);
+			 state.retry=0;
 		}
 
 		/*Reached end of window, wait for the correct ACK*/
@@ -95,17 +95,15 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 				if(status!=-1 ){
 					if(packet->type==DATAACK){
 						printf("INFO: ACK received requesting packet %d\n",packet->seqnum);
-						state.seqnum=packet->seqnum;
+						if(packet->seqnum>state.seq_base){
+							alarm(0);
+							state.seq_max=packet->seqnum+state.win_size-1;
+							state.seq_base=packet->seqnum;
+							reset_alrm=true;
+							state.win_size=2;
+						}
+						break;
 					}
-				}
-				if(state.seqnum>state.seq_base){
-					alarm(0);
-					state.seq_max=state.seqnum+state.win_size-1;
-					state.seq_base=state.seqnum;
-					reset_alrm=true;
-					state.retry=0;
-					state.win_size=2;
-					break;
 				}
 			}else return(-1);
 		}
@@ -137,7 +135,7 @@ ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
 				printf("INFO: DATA received successfully.\n");
 				/* Receiver responds with DATAACK */
 				ack_packet->type=DATAACK;
-				if(state.seqnum==N+1)state.seqnum=1;
+				
 				printf("INFO: Packet seqnum : %d State seqnum: %d\n",packet->seqnum,state.seqnum);
                 if(state.seqnum == packet->seqnum){
 					printf("INFO: Received DATA packet is in sequence.\n");
