@@ -74,9 +74,9 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 		printf("INFO: Checksum of packet: %d\n",data_packet->checksum);
 
 		if(state.seq_curr-1==packet_num && len%DATALEN>0)
-			status=maybe_sendto(sockfd,data_packet,5+len%DATALEN,0,state.address,state.socklen);
+			status=sendto(sockfd,data_packet,5+len%DATALEN,0,state.address,state.socklen);
 		else 
-			status=maybe_sendto(sockfd,data_packet,sizeof(*data_packet),0,state.address,state.socklen);
+			status=sendto(sockfd,data_packet,sizeof(*data_packet),0,state.address,state.socklen);
 
 		if(status==-1){
 			printf("ERROR: DATA packet %d send failed.\n",state.seq_curr-1);
@@ -123,6 +123,8 @@ ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
 	gbnhdr *packet = malloc(sizeof(*packet));
 	gbnhdr *ack_packet = malloc(sizeof(*ack_packet));
 
+	int unmatched = 0;
+
 	while(retryCount <= MAX_RETRY_ATTEMPTS && state.state != CLOSED){
 
 		status = recvfrom(sockfd, packet, sizeof(*packet), 0, state.address, &state.socklen);
@@ -130,7 +132,11 @@ ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
 			uint16_t checksum_actual = packet->checksum;
 			packet->checksum = (uint16_t) 0;
 			uint16_t checksum_expected  = checksum(packet, sizeof(*packet) / sizeof(uint16_t));	
-			printf("INFO: Expected checksum value : %d . Actual checksum value : %d\n",checksum_expected,checksum_actual);
+			if(checksum_expected != checksum_actual){
+				printf("INFO: Expected checksum value : %d . Actual checksum value : %d\n",checksum_expected,checksum_actual);
+				unmatched = unmatched+1;
+				printf("Unmatched checksum: %d\n",unmatched);				
+			}
 			if(packet->type == DATA){
 				/* Sender has sent a DATA packet */
 				printf("INFO: DATA received successfully.\n");
@@ -140,7 +146,9 @@ ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
                 if(state.seqnum == packet->seqnum){
 					printf("INFO: Received DATA packet is in sequence.\n");
 					memcpy(buf,packet->data,sizeof(packet->data));
-                    state.seqnum = packet->seqnum + 1;
+					state.seqnum = packet->seqnum + 1;
+					if(state.seqnum >1024)
+						state.seqnum = 1;
                     ack_packet->seqnum = state.seqnum;
 					ack_packet->checksum = 0;
 					is_seq = true;
@@ -152,7 +160,7 @@ ssize_t gbn_recv(int sockfd, void *buf, size_t len, int flags){
 					is_seq = false;
                 }
                 /* Sending ACK / duplicate ACK */
-                if (maybe_sendto(sockfd, ack_packet, sizeof(*ack_packet), 0, state.address, state.socklen) == -1) {
+                if (sendto(sockfd, ack_packet, sizeof(*ack_packet), 0, state.address, state.socklen) == -1) {
                         printf("ERROR: ACK sending failed.\n");
                         state.state = CLOSED;
                         break;
@@ -213,7 +221,7 @@ int gbn_close(int sockfd){
 			fin_packet->seqnum = 0;
 			fin_packet->checksum = (uint16_t) 0;
 			fin_packet->checksum = checksum(fin_packet, sizeof(*fin_packet) / sizeof(uint16_t));
-			status = maybe_sendto(sockfd, fin_packet, sizeof(*fin_packet), 0, state.address, state.socklen);
+			status = sendto(sockfd, fin_packet, sizeof(*fin_packet), 0, state.address, state.socklen);
 			if(status == -1){
 				printf("ERROR: FIN send failed.Retrying ...\n");
 				state.state = ESTABLISHED;
@@ -230,7 +238,7 @@ int gbn_close(int sockfd){
 			fin_ack_packet->seqnum = 0;
 			fin_ack_packet->checksum = (uint16_t) 0;
 			fin_ack_packet->checksum = checksum(fin_ack_packet, sizeof(*fin_ack_packet) / sizeof(uint16_t));						
-			status = maybe_sendto(sockfd, fin_ack_packet, sizeof(*fin_ack_packet), 0, state.address, state.socklen);
+			status = sendto(sockfd, fin_ack_packet, sizeof(*fin_ack_packet), 0, state.address, state.socklen);
 			if(status == -1){
 				printf("ERROR: FINACK send failed.Retrying ...\n");
 				state.state = FIN_INIT;
@@ -246,7 +254,7 @@ int gbn_close(int sockfd){
 			fin_packet->seqnum = 0;
 			fin_packet->checksum = (uint16_t) 0;
 			fin_packet->checksum = checksum(fin_packet, sizeof(*fin_packet) / sizeof(uint16_t));
-			status = maybe_sendto(sockfd, fin_packet, sizeof(*fin_packet), 0, state.address, state.socklen);
+			status = sendto(sockfd, fin_packet, sizeof(*fin_packet), 0, state.address, state.socklen);
 			if(status == -1){
 				printf("ERROR: FIN send failed.Retrying ...\n");
 				state.state = FIN_ACKED;
@@ -303,7 +311,7 @@ int gbn_close(int sockfd){
 						fin_ack_packet->seqnum = 0;
 						fin_ack_packet->checksum = (uint16_t) 0;
 						fin_ack_packet->checksum = checksum(fin_ack_packet, sizeof(*fin_ack_packet) / sizeof(uint16_t));						
-						status = maybe_sendto(sockfd, fin_ack_packet, sizeof(*fin_ack_packet), 0, state.address, state.socklen);
+						status = sendto(sockfd, fin_ack_packet, sizeof(*fin_ack_packet), 0, state.address, state.socklen);
 						if(status == -1){
 							printf("ERROR: FINACK send failed.Retrying ...\n");
 							state.state = FIN_RCVD;
@@ -352,7 +360,7 @@ int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 			syn_packet->seqnum = 0;
 			syn_packet->checksum = (uint16_t) 0;
 			syn_packet->checksum = checksum(syn_packet, sizeof(*syn_packet) / sizeof(uint16_t));						
-			status = maybe_sendto(sockfd, syn_packet, sizeof(*syn_packet), 0, server, socklen);
+			status = sendto(sockfd, syn_packet, sizeof(*syn_packet), 0, server, socklen);
 			if(status == -1){
 				printf("ERROR: SYN send failed.Retrying ...\n");
 				state.state = CLOSED;
@@ -377,7 +385,7 @@ int gbn_connect(int sockfd, const struct sockaddr *server, socklen_t socklen){
 					ack_packet->seqnum = 1;
 					ack_packet->checksum = (uint16_t) 0;
 					ack_packet->checksum = checksum(ack_packet, sizeof(*ack_packet) / sizeof(uint16_t));
-					status = maybe_sendto(sockfd, ack_packet, sizeof(*ack_packet), 0, server, socklen);
+					status = sendto(sockfd, ack_packet, sizeof(*ack_packet), 0, server, socklen);
 					if(status != -1){
 						state.state = ESTABLISHED;
 						state.seqnum=ack_packet->seqnum;
@@ -468,7 +476,7 @@ int gbn_accept(int sockfd, struct sockaddr *client, socklen_t *socklen){
 			syn_ack_packet->seqnum = 1;
 			syn_ack_packet->checksum = (uint16_t) 0;
 			syn_ack_packet->checksum = checksum(syn_ack_packet, sizeof(*syn_ack_packet) / sizeof(uint16_t));
-			status = maybe_sendto(sockfd, syn_ack_packet, sizeof(*syn_ack_packet), 0, client, *socklen);
+			status = sendto(sockfd, syn_ack_packet, sizeof(*syn_ack_packet), 0, client, *socklen);
 			if(status != -1){
 				printf("INFO: SYN_ACK sent successfully.\n");
 				free(syn_ack_packet);
