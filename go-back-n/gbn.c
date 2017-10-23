@@ -67,8 +67,11 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 			alarm(1.5);
 			reset_alrm=false;
 		}
-
-		data_packet->checksum = checksum(data_packet, sizeof(*data_packet) / sizeof(uint16_t));
+		if(state.seq_curr-1 == packet_num && len%DATALEN > 0){
+			data_packet->checksum = checksum(data_packet, (len%DATALEN + sizeof(data_packet->type)+ sizeof(data_packet->seqnum)+ sizeof(data_packet->checksum) )/ sizeof(uint16_t));			
+		}else{
+			data_packet->checksum = checksum(data_packet, sizeof(*data_packet) / sizeof(uint16_t));			
+		}
 		printf("INFO: Checksum of packet: %d\n",data_packet->checksum);
 
 		if(state.seq_curr-1==packet_num){
