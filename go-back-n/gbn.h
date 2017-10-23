@@ -41,7 +41,7 @@ extern int errno;
 /*----- Go-Back-n packet format -----*/
 typedef struct {
 	uint8_t  type;            /* packet type (e.g. SYN, DATA, ACK, FIN)     */
-	uint8_t  seqnum;          /* sequence number of the packet              */
+	uint16_t  seqnum;          /* sequence number of the packet              */
     uint16_t checksum;        /* header and payload checksum                */
     uint8_t data[DATALEN];    /* pointer to the payload                     */
 } __attribute__((packed)) gbnhdr;
@@ -50,14 +50,14 @@ typedef struct state_t{
 
 	/* TODO: Your state information could be encoded here. */
 	uint8_t state;
-	uint8_t seqnum; 
+	uint16_t seqnum; 
 	struct sockaddr *address;
 	socklen_t socklen;
 	uint8_t win_size;
 	uint8_t retry;
-	uint8_t seq_base;
-	uint8_t seq_max;
-	uint8_t seq_curr;
+	uint16_t seq_base;
+	uint16_t seq_max;
+	uint16_t seq_curr;
 
 } state_t;
 
@@ -67,6 +67,9 @@ enum {
 	SYN_SENT,
 	SYN_RCVD,
 	ESTABLISHED,
+	FIN_CONF,
+	FIN_INIT,
+	FIN_ACKED,
 	FIN_SENT,
 	FIN_RCVD
 };
