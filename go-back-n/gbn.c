@@ -117,7 +117,7 @@ ssize_t gbn_send(int sockfd, const void *buf, size_t len, int flags){
 				if(status!=-1 ){
 					if(packet->type==DATAACK){
 						printf("INFO: ACK received requesting packet %d\n",packet->seqnum);
-						if(packet->seqnum>state.seq_base){
+						if(packet->seqnum>state.seq_base||(packet->seqnum == 1 && state.seq_base== DATALEN-state.win_size+1)){
 							alarm(0);
 							state.seq_max=packet->seqnum+state.win_size-1;
 							state.seq_base=packet->seqnum;
