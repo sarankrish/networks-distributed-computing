@@ -40,13 +40,21 @@ ChatDialog::ChatDialog()
 
 void ChatDialog::gotReturnPressed()
 {
-	// Initially, just echo the string locally.
-	// Insert some networking code here...
+	QByteArray datagram;
+	QDataStream out(&datagram,QIODevice::ReadWrite);
+	out << textline->text();
+	emit msgReadyToSend(datagram);
+
 	qDebug() << "FIX: send message to other peers: " << textline->text();
 	textview->append(textline->text());
 
 	// Clear the textline to get ready for the next input message.
 	textline->clear();
+}
+
+void ChatDialog::messageReceived(QString msg){
+	qDebug() << "FIX: received message from peer: " << msg;
+	textview->append(msg);
 }
 
 NetSocket::NetSocket()
@@ -60,6 +68,7 @@ NetSocket::NetSocket()
 	// We use the range from 32768 to 49151 for this purpose.
 	myPortMin = 32768 + (getuid() % 4096)*4;
 	myPortMax = myPortMin + 3;
+	connect(this,SIGNAL(readyRead()),this,SLOT(readPendingDatagrams()));
 }
 
 bool NetSocket::bind()
@@ -77,6 +86,27 @@ bool NetSocket::bind()
 	return false;
 }
 
+void NetSocket::readPendingDatagrams(){
+	while (this->hasPendingDatagrams()){
+		QByteArray datagram;
+		datagram.resize(this->pendingDatagramSize());
+		QHostAddress sender;
+		quint16 senderPort;
+
+		this->readDatagram(datagram.data(),datagram.size(),&sender,&senderPort);
+		QDataStream in(&datagram,QIODevice::ReadOnly);
+		QString msg;
+		in >> msg;
+		emit datagramReceived(msg);
+	}
+}
+
+void NetSocket::sendDatagram(QByteArray datagram){
+	for(int p=myPortMin;p<=myPortMax;p++){
+		writeDatagram(datagram,QHostAddress(QHostAddress::LocalHost),p);
+	}
+}
+
 int main(int argc, char **argv)
 {
 	// Initialize Qt toolkit
@@ -90,7 +120,8 @@ int main(int argc, char **argv)
 	NetSocket sock;
 	if (!sock.bind())
 		exit(1);
-
+	QObject::connect(&sock,SIGNAL(datagramReceived(QString)),&dialog,SLOT(messageReceived(QString)));
+	QObject::connect(&dialog,SIGNAL(msgReadyToSend(QByteArray)),&sock,SLOT(sendDatagram(QByteArray)));
 	// Enter the Qt main loop; everything else is event driven
 	return app.exec();
 }

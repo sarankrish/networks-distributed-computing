@@ -13,8 +13,12 @@ class ChatDialog : public QDialog
 public:
 	ChatDialog();
 
+signals:
+	void msgReadyToSend(QByteArray datagram);
+
 public slots:
 	void gotReturnPressed();
+	void messageReceived(QString msg);
 
 private:
 	QTextEdit *textview;
@@ -30,6 +34,12 @@ public:
 
 	// Bind this socket to a P2Papp-specific default port.
 	bool bind();
+signals:
+	void datagramReceived(QString msg);
+public slots:
+	void readPendingDatagrams();
+	void sendDatagram(QByteArray datagram);
+
 
 private:
 	int myPortMin, myPortMax;
