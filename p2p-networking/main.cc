@@ -4,6 +4,8 @@
 #include <QVBoxLayout>
 #include <QApplication>
 #include <QDebug>
+#include <string>
+#include <time.h>
 
 #include "main.hh"
 
@@ -36,25 +38,32 @@ ChatDialog::ChatDialog()
 	// so that we can send the message entered by the user.
 	connect(textline, SIGNAL(returnPressed()),
 		this, SLOT(gotReturnPressed()));
+	srand ( time(NULL) );
+	username="local"+QString::number(rand());
 }
 
 void ChatDialog::gotReturnPressed()
 {
 	QByteArray datagram;
 	QDataStream out(&datagram,QIODevice::ReadWrite);
-	out << textline->text();
+	QMap<QString, QVariant> msg;
+	msg["Origin"]=username;
+	msg["ChatText"]=textline->text();
+	out << msg;
 	emit msgReadyToSend(datagram);
 
 	qDebug() << "FIX: send message to other peers: " << textline->text();
-	textview->append(textline->text());
+	textview->append(msg["Origin"].toString()+": "+ textline->text());
 
 	// Clear the textline to get ready for the next input message.
 	textline->clear();
 }
 
-void ChatDialog::messageReceived(QString msg){
+void ChatDialog::messageReceived(QMap<QString, QVariant> msg){
 	qDebug() << "FIX: received message from peer: " << msg;
-	textview->append(msg);
+	if (msg["Origin"]!=username){
+		textview->append(msg["Origin"].toString()+": "+msg["ChatText"].toString());
+	}
 }
 
 NetSocket::NetSocket()
@@ -80,7 +89,6 @@ bool NetSocket::bind()
 			return true;
 		}
 	}
-
 	qDebug() << "Oops, no ports in my default range " << myPortMin
 		<< "-" << myPortMax << " available";
 	return false;
@@ -95,8 +103,9 @@ void NetSocket::readPendingDatagrams(){
 
 		this->readDatagram(datagram.data(),datagram.size(),&sender,&senderPort);
 		QDataStream in(&datagram,QIODevice::ReadOnly);
-		QString msg;
+		QMap<QString, QVariant> msg;
 		in >> msg;
+
 		emit datagramReceived(msg);
 	}
 }
@@ -120,7 +129,7 @@ int main(int argc, char **argv)
 	NetSocket sock;
 	if (!sock.bind())
 		exit(1);
-	QObject::connect(&sock,SIGNAL(datagramReceived(QString)),&dialog,SLOT(messageReceived(QString)));
+	QObject::connect(&sock,SIGNAL(datagramReceived(QMap<QString,QVariant>)),&dialog,SLOT(messageReceived(QMap<QString, QVariant>)));
 	QObject::connect(&dialog,SIGNAL(msgReadyToSend(QByteArray)),&sock,SLOT(sendDatagram(QByteArray)));
 	// Enter the Qt main loop; everything else is event driven
 	return app.exec();

@@ -18,11 +18,12 @@ signals:
 
 public slots:
 	void gotReturnPressed();
-	void messageReceived(QString msg);
+	void messageReceived(QMap<QString, QVariant> msg);
 
 private:
 	QTextEdit *textview;
 	QLineEdit *textline;
+	QString username;
 };
 
 class NetSocket : public QUdpSocket
@@ -35,7 +36,7 @@ public:
 	// Bind this socket to a P2Papp-specific default port.
 	bool bind();
 signals:
-	void datagramReceived(QString msg);
+	void datagramReceived(QMap<QString,QVariant> msg);
 public slots:
 	void readPendingDatagrams();
 	void sendDatagram(QByteArray datagram);

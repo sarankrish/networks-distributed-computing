@@ -41,7 +41,8 @@ static const uint qt_meta_data_ChatDialog[] = {
 
 static const char qt_meta_stringdata_ChatDialog[] = {
     "ChatDialog\0\0datagram\0msgReadyToSend(QByteArray)\0"
-    "gotReturnPressed()\0msg\0messageReceived(QString)\0"
+    "gotReturnPressed()\0msg\0"
+    "messageReceived(QMap<QString,QVariant>)\0"
 };
 
 void ChatDialog::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, void **_a)
@@ -52,7 +53,7 @@ void ChatDialog::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
         switch (_id) {
         case 0: _t->msgReadyToSend((*reinterpret_cast< QByteArray(*)>(_a[1]))); break;
         case 1: _t->gotReturnPressed(); break;
-        case 2: _t->messageReceived((*reinterpret_cast< QString(*)>(_a[1]))); break;
+        case 2: _t->messageReceived((*reinterpret_cast< QMap<QString,QVariant>(*)>(_a[1]))); break;
         default: ;
         }
     }
@@ -120,14 +121,14 @@ static const uint qt_meta_data_NetSocket[] = {
       15,   11,   10,   10, 0x05,
 
  // slots: signature, parameters, type, tag, flags
-      41,   10,   10,   10, 0x0a,
-      73,   64,   10,   10, 0x0a,
+      56,   10,   10,   10, 0x0a,
+      88,   79,   10,   10, 0x0a,
 
        0        // eod
 };
 
 static const char qt_meta_stringdata_NetSocket[] = {
-    "NetSocket\0\0msg\0datagramReceived(QString)\0"
+    "NetSocket\0\0msg\0datagramReceived(QMap<QString,QVariant>)\0"
     "readPendingDatagrams()\0datagram\0"
     "sendDatagram(QByteArray)\0"
 };
@@ -138,7 +139,7 @@ void NetSocket::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, v
         Q_ASSERT(staticMetaObject.cast(_o));
         NetSocket *_t = static_cast<NetSocket *>(_o);
         switch (_id) {
-        case 0: _t->datagramReceived((*reinterpret_cast< QString(*)>(_a[1]))); break;
+        case 0: _t->datagramReceived((*reinterpret_cast< QMap<QString,QVariant>(*)>(_a[1]))); break;
         case 1: _t->readPendingDatagrams(); break;
         case 2: _t->sendDatagram((*reinterpret_cast< QByteArray(*)>(_a[1]))); break;
         default: ;
@@ -186,7 +187,7 @@ int NetSocket::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
 }
 
 // SIGNAL 0
-void NetSocket::datagramReceived(QString _t1)
+void NetSocket::datagramReceived(QMap<QString,QVariant> _t1)
 {
     void *_a[] = { 0, const_cast<void*>(reinterpret_cast<const void*>(&_t1)) };
     QMetaObject::activate(this, &staticMetaObject, 0, _a);
