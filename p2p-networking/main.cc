@@ -52,6 +52,8 @@ ChatDialog::ChatDialog()
 		this, SLOT(antiEntropy()));
 	this->ae_timer->start(10000);
 
+
+	srand(time(NULL));
 	username="local"+QString::number(rand());
 	SeqNo = 1;
 	QMap<QString, quint32> wants;
@@ -169,10 +171,14 @@ void ChatDialog::readPendingDatagrams(){
 				//Rumor message from a peer
 				if(statusMap["Want"].contains(origin)) {
 					if (statusMap["Want"][origin] == seqnum) {
+						statusMap["Want"][origin]=seqnum+1;
+						textview->append(origin + ": " + msg["ChatText"].toString());
 					}
 				}else { 
+					qDebug()<< "ACK: "+ origin+msg["SeqNo"].toString();
 					statusMap["Want"].insert(origin, seqnum+1);
-					}
+					textview->append(origin + ": " + msg["ChatText"].toString());
+				}
 			}
 
 			if(myMsgs.contains(origin)) {
@@ -183,7 +189,7 @@ void ChatDialog::readPendingDatagrams(){
 				myMsgs.insert(origin, qMap);
 				myMsgs[origin].insert(seqnum, msg);
 			}
-			textview->append(origin + ": " + msg["ChatText"].toString());
+			
 			QByteArray rumorDatagram;
 			QDataStream out_rumor(&rumorDatagram,QIODevice::ReadWrite);
 			out_rumor << msg;
@@ -208,17 +214,16 @@ void ChatDialog::processStatusMsg(QMap<QString, QMap<QString, quint32> > peerSta
 	QDataStream rumor_out(&rumorDatagram, QIODevice::ReadWrite);
 	
 	QByteArray status_datagram;
-    QDataStream status_out(&status_datagram,QIODevice::ReadWrite);
-
-
+	QDataStream status_out(&status_datagram,QIODevice::ReadWrite);
 
 	for (QMap<QString, quint32>::const_iterator iter = peerStatusMsg["Want"].begin(); iter != peerStatusMsg["Want"].end(); ++iter) {
 		qDebug() <<  "Inside loop1" ;
 		if(!statusMap["Want"].contains(iter.key())) {
 			//self doesnt have peer
 			//send status
+			statusMap["Want"].insert(iter.key(),1);
 			status_out << statusMap;
-			sock->writeDatagram(status_datagram,QHostAddress(QHostAddress::LocalHost),remotePort);
+			sendDatagram(status_datagram);
     		timer->start(10000);
 
         }
@@ -232,26 +237,30 @@ void ChatDialog::processStatusMsg(QMap<QString, QMap<QString, quint32> > peerSta
 			qDebug() <<  "Iter key"<<iter.key() ;
 			qDebug() <<  "my msgs"<<myMsgs[iter.key()];
 			rumor_out << myMsgs[iter.key()][0];
-			sock->writeDatagram(rumorDatagram,QHostAddress(QHostAddress::LocalHost),remotePort);
+			sendDatagram(rumorDatagram);
     		timer->start(10000);
 
         } else if(peerStatusMsg["Want"][iter.key()] < statusMap["Want"][iter.key()]) {
 			//self ahead
 			//send myMsgs[iter.key()][0];
-			rumor_out << myMsgs[iter.key()][0];
-			sock->writeDatagram(rumorDatagram,QHostAddress(QHostAddress::LocalHost),remotePort);
+			qDebug() << "self ahead";
+			rumor_out << myMsgs[iter.key()][peerStatusMsg["Want"][iter.key()]];
+			sendDatagram(rumorDatagram);
     		timer->start(10000);
 			
         }
         else if(peerStatusMsg["Want"][iter.key()] > statusMap["Want"][iter.key()]){
 			//self behind
 			//send status
+			qDebug() << "self behind";
 			status_out << statusMap;
-			sock->writeDatagram(status_datagram,QHostAddress(QHostAddress::LocalHost),remotePort);
+			sendDatagram(status_datagram);
     		timer->start(10000);
 		}
 		else{
 			//same status ?
+			continue;
+
 		}
     }
 
@@ -296,7 +305,7 @@ void ChatDialog::antiEntropy(){
 	qDebug() <<  "All my messages :"<<myMsgs; 
     out << statusMap;
 	sendDatagram(datagram);
-    ae_timer->start(10000);
+    //ae_timer->start(10000);
 }
 
 
