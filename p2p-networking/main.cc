@@ -38,25 +38,68 @@ ChatDialog::ChatDialog()
 	// so that we can send the message entered by the user.
 	connect(textline, SIGNAL(returnPressed()),
 		this, SLOT(gotReturnPressed()));
-	srand ( time(NULL) );
+
+	this->sock = new NetSocket();
+	connect(sock, SIGNAL(readyRead()), 
+		this, SLOT(readPendingDatagrams()));
+
+	this->timer = new QTimer(this);
+	connect(timer, SIGNAL(timeout()), 
+		this, SLOT(timeoutHandler()));
+
+	this->ae_timer = new QTimer(this);
+	connect(ae_timer, SIGNAL(timeout()), 
+		this, SLOT(antiEntropy()));
+
 	username="local"+QString::number(rand());
+	SeqNo = 1;
+	QMap<QString, quint32> wants;
+	statusMap.insert("Want",wants);
 }
 
 void ChatDialog::gotReturnPressed()
 {
-	QByteArray datagram;
-	QDataStream out(&datagram,QIODevice::ReadWrite);
-	QMap<QString, QVariant> msg;
-	msg["Origin"]=username;
-	msg["ChatText"]=textline->text();
-	out << msg;
-	emit msgReadyToSend(datagram);
+	qDebug() <<  "Inside gotReturnPressed()" ;
+	QByteArray datagram = serialize(textline->text());
+	//emit msgReadyToSend(datagram);
 
 	qDebug() << "FIX: send message to other peers: " << textline->text();
-	textview->append(msg["Origin"].toString()+": "+ textline->text());
+	textview->append(username+": "+ textline->text());
 
+	if(statusMap["Want"].contains(username)) {
+        statusMap["Want"][username] += 1;
+    }
+    else {
+        statusMap["Want"].insert(username, 1);
+	}
+
+	sendDatagram(datagram);
 	// Clear the textline to get ready for the next input message.
 	textline->clear();
+}
+
+QByteArray ChatDialog::serialize(QString text){
+
+	QMap<QString, QVariant> msg;
+	msg["Origin"]=username;
+	msg["ChatText"]=text;
+	msg["SeqNo"]= SeqNo++;
+
+    if(myMsgs.contains(username)) { 
+        myMsgs[username].insert(SeqNo, msg);
+    }
+    else {
+        QMap<quint32, QVariantMap> tmap;
+        myMsgs.insert(username, tmap);
+        myMsgs[username].insert(SeqNo, msg);
+    }
+
+	QByteArray datagram;
+	QDataStream out(&datagram,QIODevice::ReadWrite);
+	
+	out << msg;
+	return datagram;
+
 }
 
 void ChatDialog::messageReceived(QMap<QString, QVariant> msg){
@@ -86,6 +129,7 @@ bool NetSocket::bind()
 	for (int p = myPortMin; p <= myPortMax; p++) {
 		if (QUdpSocket::bind(p)) {
 			qDebug() << "bound to UDP port " << p;
+			myPortCurr = p;
 			return true;
 		}
 	}
@@ -94,27 +138,104 @@ bool NetSocket::bind()
 	return false;
 }
 
-void NetSocket::readPendingDatagrams(){
-	while (this->hasPendingDatagrams()){
+void ChatDialog::readPendingDatagrams(){
+	while (sock->hasPendingDatagrams()){
 		QByteArray datagram;
-		datagram.resize(this->pendingDatagramSize());
+		datagram.resize(sock->pendingDatagramSize());
 		QHostAddress sender;
 		quint16 senderPort;
 
-		this->readDatagram(datagram.data(),datagram.size(),&sender,&senderPort);
+		sock->readDatagram(datagram.data(),datagram.size(),&sender,&senderPort);
+		remotePort = senderPort;
+
 		QDataStream in(&datagram,QIODevice::ReadOnly);
 		QMap<QString, QVariant> msg;
 		in >> msg;
 
-		emit datagramReceived(msg);
+		if (msg.contains("Want")) {
+			QMap<QString, QMap<QString, quint32> > statusMap;
+			QDataStream status_in(&datagram, QIODevice::ReadOnly);
+			status_in >> statusMap;
+			//processStatus(statusMap);
+		}
+		else if(msg.contains("ChatText")){
+			//Rumor Message
+			QString origin = msg["Origin"].toString();
+			quint32 seqnum = msg["SeqNo"].toUInt();
+			if(username != origin) {
+				//Rumor message from a peer
+				if(statusMap["Want"].contains(origin)) {
+					if (statusMap["Want"][origin] == seqnum) {
+					}
+				}else { 
+					statusMap["Want"].insert(origin, seqnum+1);
+					}
+			}
+
+			if(myMsgs.contains(origin)) {
+        		myMsgs[origin].insert(seqnum, msg);
+    		}
+			else {
+				QMap<quint32, QMap<QString, QVariant> > qMap;
+				myMsgs.insert(origin, qMap);
+				myMsgs[origin].insert(seqnum, msg);
+			}
+			textview->append(origin + ": " + msg["ChatText"].toString());
+			QByteArray rumorDatagram;
+			QDataStream out_rumor(&rumorDatagram,QIODevice::ReadWrite);
+			out_rumor << msg;
+			sendDatagram(rumorDatagram);
+			curr_msg = msg;
+			timer->stop();
+    		QByteArray status_datagram;
+    		QDataStream status_out(&datagram,QIODevice::ReadWrite);
+    		status_out << statusMap;
+			sock->writeDatagram(status_datagram,QHostAddress(QHostAddress::LocalHost),remotePort);
+    		timer->start(10000);
+		}
+
+		//emit datagramReceived(msg);
 	}
 }
 
-void NetSocket::sendDatagram(QByteArray datagram){
-	for(int p=myPortMin;p<=myPortMax;p++){
-		writeDatagram(datagram,QHostAddress(QHostAddress::LocalHost),p);
+
+
+void ChatDialog::sendDatagram(QByteArray datagram){
+	qDebug() <<  "Inside sendDatagram()" ;
+    if (sock->myPortCurr == sock->myPortMin) {
+        neighbor = sock->myPortCurr + 1;
+    } else if (sock->myPortCurr == sock->myPortMax) {
+        neighbor = sock->myPortCurr - 1;
+    } else {
+        qDebug () << "Flipping a coin ...";
+        srand(time(NULL));
+	    neighbor = (rand() % 2 == 0) ?  sock->myPortCurr - 1: sock->myPortCurr + 1;
 	}
+
+	qDebug() <<  "Neighbor identified as :" << QString::number(neighbor);
+	sock->writeDatagram(datagram,QHostAddress(QHostAddress::LocalHost),neighbor);
+	timer->start(10000);	
+
 }
+
+
+void ChatDialog::timeoutHandler() {
+    QByteArray datagram;
+    QDataStream resend_out(&datagram, QIODevice::ReadWrite);
+    resend_out << curr_msg;
+	qDebug() <<  "Resending because of timeout :" << QString::number(neighbor);
+	sock->writeDatagram(datagram,QHostAddress(QHostAddress::LocalHost),neighbor);
+    timer->start(10000);
+}
+
+void ChatDialog::antiEntropy(){
+    QByteArray datagram;
+    QDataStream out(&datagram,QIODevice::ReadWrite);
+    out << statusMap;
+	sendDatagram(datagram);
+    ae_timer->start(10000);
+}
+
 
 int main(int argc, char **argv)
 {
@@ -124,13 +245,13 @@ int main(int argc, char **argv)
 	// Create an initial chat dialog window
 	ChatDialog dialog;
 	dialog.show();
-
+	qDebug() <<  "Inside main()" ;
 	// Create a UDP network socket
-	NetSocket sock;
-	if (!sock.bind())
+	//NetSocket sock;
+	if (!dialog.sock->bind())
 		exit(1);
-	QObject::connect(&sock,SIGNAL(datagramReceived(QMap<QString,QVariant>)),&dialog,SLOT(messageReceived(QMap<QString, QVariant>)));
-	QObject::connect(&dialog,SIGNAL(msgReadyToSend(QByteArray)),&sock,SLOT(sendDatagram(QByteArray)));
+	QObject::connect(dialog.sock,SIGNAL(datagramReceived(QMap<QString,QVariant>)),&dialog,SLOT(messageReceived(QMap<QString, QVariant>)));
+	//QObject::connect(&dialog,SIGNAL(msgReadyToSend(QByteArray)),dialog.sock,SLOT(sendDatagram(QByteArray)));
 	// Enter the Qt main loop; everything else is event driven
 	return app.exec();
 }
