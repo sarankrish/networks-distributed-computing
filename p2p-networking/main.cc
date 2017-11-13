@@ -153,10 +153,10 @@ void ChatDialog::readPendingDatagrams(){
 		in >> msg;
 
 		if (msg.contains("Want")) {
-			QMap<QString, QMap<QString, quint32> > statusMap;
+			QMap<QString, QMap<QString, quint32> > statusMsg;
 			QDataStream status_in(&datagram, QIODevice::ReadOnly);
-			status_in >> statusMap;
-			//processStatus(statusMap);
+			status_in >> statusMsg;
+			processStatusMsg(statusMsg);
 		}
 		else if(msg.contains("ChatText")){
 			//Rumor Message
@@ -198,6 +198,34 @@ void ChatDialog::readPendingDatagrams(){
 	}
 }
 
+void ChatDialog::processStatusMsg(QMap<QString, QMap<QString, quint32> > peerStatusMsg)
+{
+    QByteArray rumorDatagram;
+    QDataStream rumor_out(&rumorDatagram, QIODevice::ReadWrite);
+
+
+	for (QMap<QString, quint32>::const_iterator iter = peerStatusMsg["Want"].begin(); iter != peerStatusMsg["Want"].end(); ++iter) {
+	    if(!statusMap["Want"].contains(iter.key())) {
+            //self doesnt have peer
+
+        }
+	}
+	for (QMap<QString, quint32>::const_iterator iter = statusMap["Want"].begin(); iter != statusMap["Want"].end(); ++iter) {
+        if(!peerStatusMsg["Want"].contains(iter.key())){
+			//peer doesnt have self
+
+        } else if(peerStatusMsg["Want"][iter.key()] < statusMap["Want"][iter.key()]) {
+			//self ahead
+
+        }
+        else if(peerStatusMsg["Want"][iter.key()] > statusMap["Want"][iter.key()]){
+            //self behind
+        }
+    }
+
+    timer->stop();
+
+} 
 
 
 void ChatDialog::sendDatagram(QByteArray datagram){
