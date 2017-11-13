@@ -50,6 +50,7 @@ ChatDialog::ChatDialog()
 	this->ae_timer = new QTimer(this);
 	connect(ae_timer, SIGNAL(timeout()), 
 		this, SLOT(antiEntropy()));
+	this->ae_timer->start(10000);
 
 	username="local"+QString::number(rand());
 	SeqNo = 1;
@@ -70,7 +71,7 @@ void ChatDialog::gotReturnPressed()
         statusMap["Want"][username] += 1;
     }
     else {
-        statusMap["Want"].insert(username, 1);
+        statusMap["Want"].insert(username, SeqNo);
 	}
 
 	sendDatagram(datagram);
@@ -83,7 +84,7 @@ QByteArray ChatDialog::serialize(QString text){
 	QMap<QString, QVariant> msg;
 	msg["Origin"]=username;
 	msg["ChatText"]=text;
-	msg["SeqNo"]= SeqNo++;
+	msg["SeqNo"]= SeqNo;
 
     if(myMsgs.contains(username)) { 
         myMsgs[username].insert(SeqNo, msg);
@@ -92,7 +93,9 @@ QByteArray ChatDialog::serialize(QString text){
         QMap<quint32, QVariantMap> tmap;
         myMsgs.insert(username, tmap);
         myMsgs[username].insert(SeqNo, msg);
-    }
+	}
+	
+	SeqNo++;
 
 	QByteArray datagram;
 	QDataStream out(&datagram,QIODevice::ReadWrite);
@@ -120,7 +123,7 @@ NetSocket::NetSocket()
 	// We use the range from 32768 to 49151 for this purpose.
 	myPortMin = 32768 + (getuid() % 4096)*4;
 	myPortMax = myPortMin + 3;
-	connect(this,SIGNAL(readyRead()),this,SLOT(readPendingDatagrams()));
+	//connect(this,SIGNAL(readyRead()),this,SLOT(readPendingDatagrams()));
 }
 
 bool NetSocket::bind()
@@ -188,7 +191,7 @@ void ChatDialog::readPendingDatagrams(){
 			curr_msg = msg;
 			timer->stop();
     		QByteArray status_datagram;
-    		QDataStream status_out(&datagram,QIODevice::ReadWrite);
+    		QDataStream status_out(&status_datagram,QIODevice::ReadWrite);
     		status_out << statusMap;
 			sock->writeDatagram(status_datagram,QHostAddress(QHostAddress::LocalHost),remotePort);
     		timer->start(10000);
@@ -200,27 +203,56 @@ void ChatDialog::readPendingDatagrams(){
 
 void ChatDialog::processStatusMsg(QMap<QString, QMap<QString, quint32> > peerStatusMsg)
 {
+	qDebug() <<  "Inside processStatusMsg()" ;
     QByteArray rumorDatagram;
-    QDataStream rumor_out(&rumorDatagram, QIODevice::ReadWrite);
+	QDataStream rumor_out(&rumorDatagram, QIODevice::ReadWrite);
+	
+	QByteArray status_datagram;
+    QDataStream status_out(&status_datagram,QIODevice::ReadWrite);
+
 
 
 	for (QMap<QString, quint32>::const_iterator iter = peerStatusMsg["Want"].begin(); iter != peerStatusMsg["Want"].end(); ++iter) {
-	    if(!statusMap["Want"].contains(iter.key())) {
-            //self doesnt have peer
+		qDebug() <<  "Inside loop1" ;
+		if(!statusMap["Want"].contains(iter.key())) {
+			//self doesnt have peer
+			//send status
+			status_out << statusMap;
+			sock->writeDatagram(status_datagram,QHostAddress(QHostAddress::LocalHost),remotePort);
+    		timer->start(10000);
 
         }
 	}
 	for (QMap<QString, quint32>::const_iterator iter = statusMap["Want"].begin(); iter != statusMap["Want"].end(); ++iter) {
-        if(!peerStatusMsg["Want"].contains(iter.key())){
+		qDebug() <<  "Inside loop2" ;
+		if(!peerStatusMsg["Want"].contains(iter.key())){
 			//peer doesnt have self
+			//send myMsgs[iter.key()][0];
+			qDebug() <<  "Peer doesn't have self" ;
+			qDebug() <<  "Iter key"<<iter.key() ;
+			qDebug() <<  "my msgs"<<myMsgs[iter.key()];
+			rumor_out << myMsgs[iter.key()][0];
+			sock->writeDatagram(rumorDatagram,QHostAddress(QHostAddress::LocalHost),remotePort);
+    		timer->start(10000);
 
         } else if(peerStatusMsg["Want"][iter.key()] < statusMap["Want"][iter.key()]) {
 			//self ahead
-
+			//send myMsgs[iter.key()][0];
+			rumor_out << myMsgs[iter.key()][0];
+			sock->writeDatagram(rumorDatagram,QHostAddress(QHostAddress::LocalHost),remotePort);
+    		timer->start(10000);
+			
         }
         else if(peerStatusMsg["Want"][iter.key()] > statusMap["Want"][iter.key()]){
-            //self behind
-        }
+			//self behind
+			//send status
+			status_out << statusMap;
+			sock->writeDatagram(status_datagram,QHostAddress(QHostAddress::LocalHost),remotePort);
+    		timer->start(10000);
+		}
+		else{
+			//same status ?
+		}
     }
 
     timer->stop();
@@ -257,8 +289,11 @@ void ChatDialog::timeoutHandler() {
 }
 
 void ChatDialog::antiEntropy(){
+	qDebug() <<  "Inside antiEntropy()"; 
     QByteArray datagram;
-    QDataStream out(&datagram,QIODevice::ReadWrite);
+	QDataStream out(&datagram,QIODevice::ReadWrite);
+	qDebug() <<  "Status Map :"<<statusMap; 
+	qDebug() <<  "All my messages :"<<myMsgs; 
     out << statusMap;
 	sendDatagram(datagram);
     ae_timer->start(10000);
