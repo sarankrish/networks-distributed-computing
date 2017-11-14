@@ -75,7 +75,7 @@ void ChatDialog::gotReturnPressed()
     else {
         statusMap["Want"].insert(username, SeqNo);
 	}
-
+	randomPortGenerator();
 	sendDatagram(datagram);
 	// Clear the textline to get ready for the next input message.
 	textline->clear();
@@ -193,6 +193,7 @@ void ChatDialog::readPendingDatagrams(){
 			QByteArray rumorDatagram;
 			QDataStream out_rumor(&rumorDatagram,QIODevice::ReadWrite);
 			out_rumor << msg;
+			randomPortGenerator();
 			sendDatagram(rumorDatagram);
 			curr_msg = msg;
 			timer->stop();
@@ -223,6 +224,7 @@ void ChatDialog::processStatusMsg(QMap<QString, QMap<QString, quint32> > peerSta
 			//send status
 			statusMap["Want"].insert(iter.key(),1);
 			status_out << statusMap;
+			randomPortGenerator();
 			sendDatagram(status_datagram);
     		timer->start(10000);
 
@@ -237,6 +239,7 @@ void ChatDialog::processStatusMsg(QMap<QString, QMap<QString, quint32> > peerSta
 			qDebug() <<  "Iter key"<<iter.key() ;
 			qDebug() <<  "my msgs"<<myMsgs[iter.key()];
 			rumor_out << myMsgs[iter.key()][0];
+			randomPortGenerator();
 			sendDatagram(rumorDatagram);
     		timer->start(10000);
 
@@ -245,6 +248,7 @@ void ChatDialog::processStatusMsg(QMap<QString, QMap<QString, quint32> > peerSta
 			//send myMsgs[iter.key()][0];
 			qDebug() << "self ahead";
 			rumor_out << myMsgs[iter.key()][peerStatusMsg["Want"][iter.key()]];
+			randomPortGenerator();
 			sendDatagram(rumorDatagram);
     		timer->start(10000);
 			
@@ -254,6 +258,7 @@ void ChatDialog::processStatusMsg(QMap<QString, QMap<QString, quint32> > peerSta
 			//send status
 			qDebug() << "self behind";
 			status_out << statusMap;
+			randomPortGenerator();
 			sendDatagram(status_datagram);
     		timer->start(10000);
 		}
@@ -297,11 +302,28 @@ void ChatDialog::timeoutHandler() {
     timer->start(10000);
 }
 
+void ChatDialog::randomPortGenerator(){
+	if (sock->myPortCurr == sock->myPortMin) {
+        neighbor = sock->myPortCurr + 1;
+    } else if (sock->myPortCurr == sock->myPortMax) {
+        neighbor = sock->myPortCurr - 1;
+    } else {
+        qDebug () << "Flipping a coin ...";
+        srand(time(NULL));
+	    neighbor = (rand() % 2 == 0) ?  sock->myPortCurr - 1: sock->myPortCurr + 1;
+	}
+}
+
 void ChatDialog::antiEntropy(){
 	qDebug() <<  "Inside antiEntropy()"; 
     QByteArray datagram;
 	QDataStream out(&datagram,QIODevice::ReadWrite);
-	qDebug() <<  "Status Map :"<<statusMap; 
+	qDebug() <<  "Status Map :"<<statusMap;
+	randomPortGenerator();
+	QString dest="local@"+QString::number(neighbor);
+	if(!statusMap["Want"].contains(dest) ){
+		statusMap["Want"].insert(dest,1);
+	}
 	qDebug() <<  "All my messages :"<<myMsgs; 
     out << statusMap;
 	sendDatagram(datagram);

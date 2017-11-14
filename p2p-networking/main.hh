@@ -54,6 +54,7 @@ private:
 	void sendDatagram(QByteArray datagram);
 	QByteArray serialize(QString text);
 	void processStatusMsg(QMap<QString, QMap<QString, quint32> > statusMsg);
+	void randomPortGenerator();
 
 
 };
