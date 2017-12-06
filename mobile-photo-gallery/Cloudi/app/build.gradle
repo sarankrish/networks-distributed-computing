@@ -22,6 +22,7 @@ android {
 }
 
 dependencies {
+
     compile 'com.firebaseui:firebase-ui-auth:3.1.0'
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation 'com.android.support:appcompat-v7:26.1.0'
@@ -29,10 +30,12 @@ dependencies {
     implementation 'com.android.support:design:26.1.0'
     implementation 'com.android.support:support-vector-drawable:26.1.0'
     implementation 'com.google.firebase:firebase-auth:11.4.2'
+    implementation 'com.google.firebase:firebase-storage:11.4.2'
     testImplementation 'junit:junit:4.12'
     androidTestImplementation 'com.android.support.test:runner:1.0.1'
     androidTestImplementation 'com.android.support.test.espresso:espresso-core:3.0.1'
 }
+
 
 
 apply plugin: 'com.google.gms.google-services'

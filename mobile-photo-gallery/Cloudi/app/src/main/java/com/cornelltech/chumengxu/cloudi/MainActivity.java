@@ -5,6 +5,7 @@ import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 
@@ -23,6 +24,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int RC_SIGN_IN = 123;
     private Menu menu;
     private boolean signed_in=false;
+    private static final String TAG = "Logger";
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -37,9 +39,11 @@ public class MainActivity extends AppCompatActivity {
         switch (item.getItemId()) {
             case R.id.sign_in:
                 if (signed_in==false) {
+                    Log.v(TAG, "Not signed in");
                     // Choose authentication providers
                     List<AuthUI.IdpConfig> providers = Arrays.asList(
-                            new AuthUI.IdpConfig.Builder(AuthUI.EMAIL_PROVIDER).build());
+                            new AuthUI.IdpConfig.Builder(AuthUI.EMAIL_PROVIDER).build(),
+                            new AuthUI.IdpConfig.Builder(AuthUI.GOOGLE_PROVIDER).build());
 
                     // Create and launch sign-in intent
                     startActivityForResult(
@@ -64,8 +68,8 @@ public class MainActivity extends AppCompatActivity {
                 }
 
             case R.id.upload:
-                Intent intent2=new Intent(this,UploadActivity.class);
-                startActivityForResult(intent2,0);
+                Intent uploadIntent=new Intent(this,UploadActivity.class);
+                startActivityForResult(uploadIntent,0);
                 return true;
 
             default:
@@ -81,10 +85,12 @@ public class MainActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
 
         if (requestCode == RC_SIGN_IN) {
+            Log.v(TAG, "Attempting sign in...");
             IdpResponse response = IdpResponse.fromResultIntent(data);
 
-            if (resultCode == ResultCodes.OK) {
+            if (resultCode == RESULT_OK) {
                 // Successfully signed in
+                Log.v(TAG, "Successfully signed in");
                 FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
                 MenuItem signinMenuItem=menu.findItem(R.id.sign_in);
                 signinMenuItem.setTitle("Sign out");
@@ -103,6 +109,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         Toolbar myToolbar = (Toolbar) findViewById(R.id.my_toolbar);
         setSupportActionBar(myToolbar);
+        Log.v(TAG, "Successfully printed");
     }
 
 
