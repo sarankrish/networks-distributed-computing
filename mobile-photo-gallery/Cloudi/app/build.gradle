@@ -22,8 +22,10 @@ android {
 }
 
 dependencies {
-
+    implementation 'com.google.firebase:firebase-database:11.4.2'
     compile 'com.firebaseui:firebase-ui-auth:3.1.0'
+    compile 'com.firebaseui:firebase-ui-database:3.1.0'
+    compile 'com.android.support:recyclerview-v7:26.1.0'
     implementation fileTree(include: ['*.jar'], dir: 'libs')
     implementation 'com.android.support:appcompat-v7:26.1.0'
     implementation 'com.android.support.constraint:constraint-layout:1.0.2'

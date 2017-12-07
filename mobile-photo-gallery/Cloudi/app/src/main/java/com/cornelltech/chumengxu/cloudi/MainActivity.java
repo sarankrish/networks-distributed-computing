@@ -1,30 +1,48 @@
 package com.cornelltech.chumengxu.cloudi;
 
+import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
-import android.util.Log;
+import android.text.TextUtils;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.EditText;
 
 import com.firebase.ui.auth.AuthUI;
 import com.firebase.ui.auth.IdpResponse;
 import com.firebase.ui.auth.ResultCodes;
+import com.firebase.ui.database.FirebaseRecyclerAdapter;
+import com.firebase.ui.database.FirebaseRecyclerOptions;
 import com.google.android.gms.tasks.OnCompleteListener;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.Query;
 
 import java.util.Arrays;
 import java.util.List;
 
+
 public class MainActivity extends AppCompatActivity {
+    public static final String EXTRA_MESSAGE = "com.cornelltech.chumengxu.MESSAGE";
     private static final int RC_SIGN_IN = 123;
     private Menu menu;
-    private boolean signed_in=false;
-    private static final String TAG = "Logger";
+    //public Firebase storage bucket
+    private static FirebaseDatabase mDatabase;
+    private RecyclerView mRecyclerViewPrivate;
+    private RecyclerView mRecyclerViewPublic;
+    private Query query_public;
+    private Query query_private;
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -38,8 +56,7 @@ public class MainActivity extends AppCompatActivity {
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
             case R.id.sign_in:
-                if (signed_in==false) {
-                    Log.v(TAG, "Not signed in");
+                if (FirebaseAuth.getInstance().getCurrentUser()==null) {
                     // Choose authentication providers
                     List<AuthUI.IdpConfig> providers = Arrays.asList(
                             new AuthUI.IdpConfig.Builder(AuthUI.EMAIL_PROVIDER).build(),
@@ -61,15 +78,16 @@ public class MainActivity extends AppCompatActivity {
                                 public void onComplete(@NonNull Task<Void> task) {
                                     MenuItem signinMenuItem=menu.findItem(R.id.sign_in);
                                     signinMenuItem.setTitle("Sign in");
-                                    signed_in=false;
+                                    initRecyclerView();
                                 }
                             });
                     return true;
                 }
 
             case R.id.upload:
-                Intent uploadIntent=new Intent(this,UploadActivity.class);
-                startActivityForResult(uploadIntent,0);
+                Intent intent2=new Intent(this,UploadActivity.class);
+                intent2.putExtra(EXTRA_MESSAGE, FirebaseAuth.getInstance().getUid());
+                startActivityForResult(intent2,0);
                 return true;
 
             default:
@@ -85,16 +103,14 @@ public class MainActivity extends AppCompatActivity {
         super.onActivityResult(requestCode, resultCode, data);
 
         if (requestCode == RC_SIGN_IN) {
-            Log.v(TAG, "Attempting sign in...");
             IdpResponse response = IdpResponse.fromResultIntent(data);
 
-            if (resultCode == RESULT_OK) {
+            if (resultCode == ResultCodes.OK) {
                 // Successfully signed in
-                Log.v(TAG, "Successfully signed in");
                 FirebaseUser user = FirebaseAuth.getInstance().getCurrentUser();
                 MenuItem signinMenuItem=menu.findItem(R.id.sign_in);
                 signinMenuItem.setTitle("Sign out");
-                signed_in=true;
+                initRecyclerView();
                 // ...
             } else {
                 // Sign in failed, check response for error code
@@ -103,15 +119,101 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         Toolbar myToolbar = (Toolbar) findViewById(R.id.my_toolbar);
         setSupportActionBar(myToolbar);
-        Log.v(TAG, "Successfully printed");
+
+        mDatabase = FirebaseDatabase.getInstance();
+        mRecyclerViewPrivate=findViewById(R.id.recycler_view_private);
+        mRecyclerViewPrivate.setLayoutManager(new LinearLayoutManager(this));
+        mRecyclerViewPublic=findViewById(R.id.recycler_view_public);
+        mRecyclerViewPublic.setLayoutManager(new LinearLayoutManager(this));
+
     }
 
+    private void initRecyclerView(){
+        query_public = mDatabase
+                .getReference()
+                .child("public");
+        updateRecyclerView(query_public,mRecyclerViewPublic);
 
+        if (FirebaseAuth.getInstance().getCurrentUser()!=null){
+            mRecyclerViewPrivate.setVisibility(View.VISIBLE);
+            findViewById(R.id.privtae_text).setVisibility(View.INVISIBLE);
+            query_private = mDatabase
+                    .getReference()
+                    .child("users/"+FirebaseAuth.getInstance().getCurrentUser().getUid().toString());
+            updateRecyclerView(query_private,mRecyclerViewPrivate);
+        }
+        else{
+            findViewById(R.id.privtae_text).setVisibility(View.VISIBLE);
+            mRecyclerViewPrivate.setVisibility(View.INVISIBLE);
+        }
+    }
 
+    private void updateRecyclerView(Query query,RecyclerView recview){
+            FirebaseRecyclerOptions<String> options =
+                new FirebaseRecyclerOptions.Builder<String>()
+                        .setQuery(query,String.class)
+                        .build();
+
+        FirebaseRecyclerAdapter adapter= new FirebaseRecyclerAdapter<String,CloudImageHolder>(options){
+            @Override
+            public CloudImageHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+                View view = LayoutInflater.from(parent.getContext())
+                        .inflate(R.layout.cloud_image, parent, false);
+                return new CloudImageHolder(view);
+            }
+
+            @Override
+            protected void onBindViewHolder(CloudImageHolder holder, int position, String model) {
+                holder.bind(model);
+            }
+        };
+        recview.setAdapter(adapter);
+        adapter.startListening();
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        EditText searchText=(EditText)findViewById(R.id.search_text);
+        searchText.setText("");
+        initRecyclerView();
+
+    }
+
+    public void searchByDescription(View view){
+        EditText searchText=(EditText)findViewById(R.id.search_text);
+        InputMethodManager inputManager = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+        inputManager.hideSoftInputFromWindow(getCurrentFocus().getWindowToken(),InputMethodManager.HIDE_NOT_ALWAYS);
+
+        String keyword=searchText.getText().toString(); //search keywords
+        if (!TextUtils.isEmpty(keyword)) {
+            query_public = mDatabase
+                    .getReference()
+                    .child("public")
+                    .orderByValue()
+                    .equalTo(keyword);
+            updateRecyclerView(query_public, mRecyclerViewPublic);
+
+            if (FirebaseAuth.getInstance().getCurrentUser() != null) {
+                query_private = mDatabase
+                        .getReference()
+                        .child("users/" + FirebaseAuth.getInstance().getCurrentUser().getUid().toString())
+                        .orderByValue()
+                        .equalTo(keyword);
+                updateRecyclerView(query_private, mRecyclerViewPrivate);
+            }
+        }
+        else{
+            initRecyclerView();
+        }
+    }
 }
+
+
