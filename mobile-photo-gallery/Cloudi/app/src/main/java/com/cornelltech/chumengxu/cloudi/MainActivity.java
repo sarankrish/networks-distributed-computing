@@ -15,6 +15,7 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
+import android.widget.CheckBox;
 import android.widget.EditText;
 
 import com.firebase.ui.auth.AuthUI;
@@ -28,6 +29,7 @@ import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseUser;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.Query;
+import com.google.firebase.storage.FirebaseStorage;
 
 import java.util.Arrays;
 import java.util.List;
@@ -39,10 +41,12 @@ public class MainActivity extends AppCompatActivity {
     private Menu menu;
     //public Firebase storage bucket
     private static FirebaseDatabase mDatabase;
+    private static FirebaseStorage mStorage;
     private RecyclerView mRecyclerViewPrivate;
     private RecyclerView mRecyclerViewPublic;
     private Query query_public;
     private Query query_private;
+    private boolean isPreProcessed = false;
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
@@ -128,6 +132,7 @@ public class MainActivity extends AppCompatActivity {
         setSupportActionBar(myToolbar);
 
         mDatabase = FirebaseDatabase.getInstance();
+        mStorage = FirebaseStorage.getInstance();
         mRecyclerViewPrivate=findViewById(R.id.recycler_view_private);
         mRecyclerViewPrivate.setLayoutManager(new LinearLayoutManager(this));
         mRecyclerViewPublic=findViewById(R.id.recycler_view_public);
@@ -136,11 +141,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initRecyclerView(){
+        CheckBox checkbox=findViewById(R.id.processed_check);
+        isPreProcessed=checkbox.isChecked();
         query_public = mDatabase
                 .getReference()
                 .child("public");
         updateRecyclerView(query_public,mRecyclerViewPublic);
-
+        //query_public.getRef()
         if (FirebaseAuth.getInstance().getCurrentUser()!=null){
             mRecyclerViewPrivate.setVisibility(View.VISIBLE);
             findViewById(R.id.privtae_text).setVisibility(View.INVISIBLE);
@@ -156,12 +163,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateRecyclerView(Query query,RecyclerView recview){
-            FirebaseRecyclerOptions<String> options =
-                new FirebaseRecyclerOptions.Builder<String>()
-                        .setQuery(query,String.class)
+            FirebaseRecyclerOptions<CloudImage> options =
+                new FirebaseRecyclerOptions.Builder<CloudImage>()
+                        .setQuery(query,CloudImage.class)
                         .build();
 
-        FirebaseRecyclerAdapter adapter= new FirebaseRecyclerAdapter<String,CloudImageHolder>(options){
+        FirebaseRecyclerAdapter adapter= new FirebaseRecyclerAdapter<CloudImage,CloudImageHolder>(options){
             @Override
             public CloudImageHolder onCreateViewHolder(ViewGroup parent, int viewType) {
                 View view = LayoutInflater.from(parent.getContext())
@@ -170,8 +177,8 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
-            protected void onBindViewHolder(CloudImageHolder holder, int position, String model) {
-                holder.bind(model);
+            protected void onBindViewHolder(CloudImageHolder holder, int position, CloudImage model) {
+                holder.bind(getCacheDir(),model,isPreProcessed);
             }
         };
         recview.setAdapter(adapter);
@@ -197,7 +204,7 @@ public class MainActivity extends AppCompatActivity {
             query_public = mDatabase
                     .getReference()
                     .child("public")
-                    .orderByValue()
+                    .orderByChild("description")
                     .equalTo(keyword);
             updateRecyclerView(query_public, mRecyclerViewPublic);
 
@@ -205,7 +212,7 @@ public class MainActivity extends AppCompatActivity {
                 query_private = mDatabase
                         .getReference()
                         .child("users/" + FirebaseAuth.getInstance().getCurrentUser().getUid().toString())
-                        .orderByValue()
+                        .orderByChild("description")
                         .equalTo(keyword);
                 updateRecyclerView(query_private, mRecyclerViewPrivate);
             }
@@ -213,6 +220,10 @@ public class MainActivity extends AppCompatActivity {
         else{
             initRecyclerView();
         }
+    }
+
+    public void showProcessed(View view){
+        initRecyclerView();
     }
 }
 

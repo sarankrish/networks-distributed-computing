@@ -71,16 +71,23 @@ public class UploadActivity extends AppCompatActivity {
         if (!TextUtils.isEmpty(uid)){
             if (!checkbox.isChecked()) {
                 filepath = mStorageRef.child("Public").child(selectedImage.getLastPathSegment());
-                mDataBaseRef.child("public").child(selectedImage.getLastPathSegment()).setValue(description);
+                mDataBaseRef.child("public").child(selectedImage.getLastPathSegment()).child("name").setValue(selectedImage.getLastPathSegment());
+                mDataBaseRef.child("public").child(selectedImage.getLastPathSegment()).child("description").setValue(description);
+                mDataBaseRef.child("public").child(selectedImage.getLastPathSegment()).child("status").setValue("public");
+
             }
             else{
                 filepath = mStorageRef.child("Users/"+uid).child(selectedImage.getLastPathSegment());
-                mDataBaseRef.child("users").child(uid).child(selectedImage.getLastPathSegment()).setValue(description);
+                mDataBaseRef.child("users").child(uid).child(selectedImage.getLastPathSegment()).child("name").setValue(selectedImage.getLastPathSegment());
+                mDataBaseRef.child("users").child(uid).child(selectedImage.getLastPathSegment()).child("description").setValue(description);
+                mDataBaseRef.child("users").child(uid).child(selectedImage.getLastPathSegment()).child("status").setValue("private");
             }
         }
         else{
             filepath = mStorageRef.child("Public").child(selectedImage.getLastPathSegment());
-            mDataBaseRef.child("public").child(selectedImage.getLastPathSegment()).setValue(description);
+            mDataBaseRef.child("public").child(selectedImage.getLastPathSegment()).child("name").setValue(selectedImage.getLastPathSegment());
+            mDataBaseRef.child("public").child(selectedImage.getLastPathSegment()).child("description").setValue(description);
+            mDataBaseRef.child("public").child(selectedImage.getLastPathSegment()).child("status").setValue("public");
         }
 
         filepath.putFile(selectedImage).addOnSuccessListener(new OnSuccessListener<UploadTask.TaskSnapshot>() {
